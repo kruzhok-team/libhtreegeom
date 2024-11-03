@@ -2,7 +2,7 @@
 
 The C++ library with the C interface for processing hierarchical
 graphs with geometry. Used by the CyberiadaML library to process state
-machine graph with geometrical parameters.
+machine graphs with geometrical parameters.
 
 The library uses homog2d geometry transformation library.
 
