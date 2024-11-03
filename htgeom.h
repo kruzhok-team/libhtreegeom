@@ -145,6 +145,8 @@ typedef struct _HTDocument {
 	HTreeNode*              htree_copy_node(HTreeNode* src);
 	HTreeNode*              htree_find_node_by_id(HTreeNode* root, const char* id);
 	int                     htree_destroy_node(HTreeNode* node);
+	int                     htree_node_has_geometry(const HTreeNode* node);
+	int                     htree_node_has_toplevel_geometry(const HTreeNode* node);
 
 	HTreeEdge*              htree_new_edge(const char* _id, const char* source_id, const char* target_id);
 	HTreeEdge*              htree_copy_edge(HTreeEdge* src);
@@ -153,6 +155,7 @@ typedef struct _HTDocument {
 	HTree*                  htree_new_tree(void);
 	HTree*                  htree_copy_tree(HTree* src);
 	int                     htree_destroy_tree(HTree* tree);
+	int                     htree_tree_has_geometry(const HTree* tree);
 
 	HTDocument*             htree_new_document(HTCoordFormat _node_coord_format,
 											   HTCoordFormat _edge_coord_format,

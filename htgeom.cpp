@@ -195,6 +195,21 @@ static int htree_get_collections(const HTree* trees,
 	return HTREE_OK;
 }
 
+static int htree_has_toplevel_rect(const HTDocument* doc)
+{
+	if (!doc) return 0;
+	if (!doc->trees) return 0;
+	
+	int found = 0;
+	for (HTree* tree = doc->trees; tree; tree = tree->next) {
+		if (tree->nodes && htree_node_has_toplevel_geometry(tree->nodes)) {
+			if (found) return 0;
+			found = 1;
+		}
+	}
+	return found;
+}
+
 /* -----------------------------------------------------------------------------
  * Base geometry transformations
  * ----------------------------------------------------------------------------- */
@@ -408,13 +423,20 @@ static int htree_build_bounding_rect(HTDocument* doc,
 	
 	res = htree_get_collections(doc->trees, points, rects, polylines);
 
-	//DEBUG << "BR points: " << points.size() << " rects: " << rects.size() << " pls: " << polylines.size() << std::endl;
-	//if (rects.size() > 0) {
-	//	DEBUG << "rect: " << rects.front() << std::endl;
-	//}
+/*	DEBUG << "BR points: " << points.size() << " rects: " << rects.size() << " pls: " << polylines.size() << std::endl;
+	if (rects.size() > 0) {
+		DEBUG << "rect: " << rects.front() << std::endl;
+		}*/
 	h2d::FRectD br;
 
-	if (points.size() > 0) {		
+	if (points.size() == 1 && rects.size() > 0) {
+		// in a case of a single point we need to add any other point to have a bounding box
+		h2d::FRectD a_rect = rects.front();
+		h2d::Point2dD a_point = a_rect.getPts().first;
+		points.push_back(a_point);
+	}
+	
+	if (points.size() > 0) {
 		try {
 			rects.push_back(h2d::getBB(points));
 		} catch (const std::runtime_error& e) {
@@ -464,7 +486,9 @@ static int htree_convert_node_tree_geometry_to_absolute(HTreeNode* nodes,
 
 	for (HTreeNode* node = nodes; node; node = node->next) {
 		if (node->point) {
+			//DEBUG << "convert point " << node->point << " with parent " << parent << " and format " << format << std::endl;
 			htree_convert_point_geometry_to_absolute(node->point, parent, format);
+			//DEBUG << "result " << node->point << std::endl;
 		}
 		if (node->rect) {
 			htree_convert_rect_geometry_to_absolute(node->rect, parent, format);
@@ -499,7 +523,11 @@ static int htree_convert_nodes_geometry_to_absolute(HTDocument* doc)
 
 	HTreeRect parent_rect;
 	htree_init_rect(&parent_rect);
-	
+	if (doc->node_coord_format == coordLocalCenter && doc->bounding_rect && !htree_has_toplevel_rect(doc)) {
+		htree_convert_rect_geometry_to_absolute(doc->bounding_rect, &parent_rect, coordLocalCenter);
+		// DEBUG << "use bounding rect " << doc->bounding_rect << " as parent" << std::endl;
+		htree_set_rect(&parent_rect, doc->bounding_rect);
+	}
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
 		htree_convert_node_tree_geometry_to_absolute(tree->nodes, &parent_rect, doc->node_coord_format);
 	}
@@ -916,6 +944,9 @@ static int htree_convert_nodes_geometry_to_format(HTDocument* doc,
 
 	HTreeRect parent_rect;
 	htree_init_rect(&parent_rect);
+	if (new_format == coordLocalCenter && doc->bounding_rect && !htree_has_toplevel_rect(doc)) {
+		htree_set_rect(&parent_rect, doc->bounding_rect);
+	}
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
 		htree_convert_node_tree_geometry_to_format(tree->nodes,
 												   &parent_rect,
@@ -1234,12 +1265,12 @@ int htree_convert_document_geometry(HTDocument* doc,
 	}
 	htree_build_bounding_rect(doc, &(doc->bounding_rect));
 	
-	/*DEBUG << "Absolute format: node coord " << doc->node_coord_format <<
+/*	DEBUG << "Absolute format: node coord " << doc->node_coord_format <<
 		" edge coord " << doc->edge_coord_format <<
 		" edge coord " << doc->edge_pl_coord_format <<
-		" edge " << doc->edge_format << std::endl; */
+		" edge " << doc->edge_format << std::endl;
 
-	//htree_print_document(doc);
+		htree_print_document(doc);*/
 	
 	htree_convert_document_geometry_to_format(doc,
 											  new_node_coord_format,

@@ -542,6 +542,71 @@ int htree_destroy_tree(HTree* tree)
 	return HTREE_OK;
 }
 
+int htree_node_has_geometry(const HTreeNode* node)
+{
+	while (node) {
+		if (node->point || node->rect) {
+			return 1;
+		}
+		if (node->children) {
+			if (htree_node_has_geometry(node->children)) {
+				return 1;
+			}
+		}
+		node = node->next;
+	}
+	return 0;
+}
+
+int htree_node_has_toplevel_geometry(const HTreeNode* node)
+{
+	int found = 0;
+	
+	for (const HTreeNode* n = node; n; n = n->next) {
+		if (n->point || n->rect) {
+			if (found) return 0;
+			found = 1;
+		}
+	}
+
+	if (found) return 1;
+
+	for (const HTreeNode* n = node; n; n = n->next) {	
+		if (n->children) {
+			if (htree_node_has_toplevel_geometry(n->children)) {
+				if (found) return 0;
+				found = 1;
+			}
+		}
+	}
+	
+	return found;
+}
+
+int htree_tree_has_geometry(const HTree* tree)
+{
+	if (!tree) {
+		return 0;
+	}
+
+	for (; tree; tree = tree->next) {
+		if (htree_node_has_geometry(tree->nodes)) {
+			return 1;
+		}
+		for (const HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
+			if (edge->polyline ||
+				edge->source_point ||
+				edge->target_point ||
+				edge->label_point ||
+				edge->label_rect) {
+				
+				return 1;
+			}
+		}	
+	}
+	return 0;
+}
+
 HTDocument* htree_new_document(HTCoordFormat _node_coord_format,
 							   HTCoordFormat _edge_coord_format,
 							   HTCoordFormat _edge_pl_coord_format,
