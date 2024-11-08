@@ -16,7 +16,7 @@ target_include_directories(htgeom PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:include/cyberiada>)
 			 
-target_link_libraries(htgeom PUBLIC m)
+target_link_libraries(htgeom PUBLIC)
 
 add_executable(htgeom_test htgeom_test.cpp)
 target_include_directories(htgeom_test PUBLIC
