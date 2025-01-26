@@ -98,9 +98,18 @@ int homog_rect_to_htree(const h2d::FRectD& hgrect, HTreeRect& rect)
 h2d::OPolylineD htree_polyline_to_homog(const HTreePolyline* polyline)
 {
 	std::vector<h2d::Point2dD> points;
-	while (polyline) {
+	if (polyline->next) {
+		/* more than one point */
+		while (polyline) {
+			points.push_back(htree_point_to_homog(&(polyline->point)));
+			polyline = polyline->next;
+		}
+	} else {
+		/* hack for one-point polylines */
+		h2d::Point2dD p = htree_point_to_homog(&(polyline->point));
 		points.push_back(htree_point_to_homog(&(polyline->point)));
-		polyline = polyline->next;
+		p = h2d::Point2dD(p.getX() + 0.01, p.getY() + 0.01);
+		points.push_back(p);	
 	}
 	return h2d::OPolyline(points);
 }
