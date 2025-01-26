@@ -14,7 +14,7 @@ if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/homog2d.hpp)
   message(FATAL_ERROR "Cannot find homog2d.hpp (download here: https://github.com/skramm/homog2d)")
 endif()
 
-add_library(htgeom STATIC htgeom_types.cpp htgeom.cpp)
+add_library(htgeom SHARED htgeom_types.cpp htgeom.cpp)
 target_include_directories(htgeom PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:include/cyberiada>)
