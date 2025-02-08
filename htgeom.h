@@ -3,7 +3,7 @@
  *
  * The the hierarchiceal tree geometry library
  *
- * Copyright (C) 2024 Alexey Fedoseev <aleksey@fedoseev.net>
+ * Copyright (C) 2024-2025 Alexey Fedoseev <aleksey@fedoseev.net>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -165,7 +165,7 @@ typedef struct _HTDocument {
 	int                     htree_destroy_document(HTDocument* doc);
 	int                     htree_print_document(const HTDocument* doc);
 
-	int                     htree_reconstruct_document_geometry(HTDocument* doc);
+	int                     htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm);
 	int                     htree_convert_document_geometry(HTDocument* doc,
 															HTCoordFormat new_node_coord_format,
 															HTCoordFormat new_edge_coord_format,

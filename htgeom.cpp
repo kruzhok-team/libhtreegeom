@@ -34,6 +34,10 @@
 #define DEBUG
 #endif
 
+#define PADDING             10
+#define NODE_WIDTH          300
+#define NODE_HEIGHT         200
+
 /* -----------------------------------------------------------------------------
  * Geometry conversions: lib to homog2d and back
  * ----------------------------------------------------------------------------- */
@@ -95,22 +99,19 @@ int homog_rect_to_htree(const h2d::FRectD& hgrect, HTreeRect& rect)
 	return HTREE_OK;
 }
 
-h2d::OPolylineD htree_polyline_to_homog(const HTreePolyline* polyline)
+h2d::OPolylineD htree_polyline_to_homog(const HTreePoint* source, const HTreePoint* target,
+										const HTreePolyline* polyline)
 {
 	std::vector<h2d::Point2dD> points;
+	points.push_back(htree_point_to_homog(source));
 	if (polyline->next) {
 		/* more than one point */
 		while (polyline) {
 			points.push_back(htree_point_to_homog(&(polyline->point)));
 			polyline = polyline->next;
 		}
-	} else {
-		/* hack for one-point polylines */
-		h2d::Point2dD p = htree_point_to_homog(&(polyline->point));
-		points.push_back(htree_point_to_homog(&(polyline->point)));
-		p = h2d::Point2dD(p.getX() + 0.01, p.getY() + 0.01);
-		points.push_back(p);	
 	}
+	points.push_back(htree_point_to_homog(target));
 	return h2d::OPolyline(points);
 }
 
@@ -124,6 +125,11 @@ HTreePolyline* homog_polyline_to_htree(const h2d::OPolylineD& hgpolyline)
 		HTreePolyline* prev = NULL;
 
 		for (std::vector<h2d::Point2dD>::const_iterator i = points.begin(); i != points.end(); i++) {
+			if (i == points.begin() || std::next(i) == points.end()) {
+				// skip the first and last point
+				continue;
+			}
+			
 			HTreePolyline* pl = htree_new_polyline();
 			pl->point.x = i->getX();
 			pl->point.y = i->getY();			
@@ -164,6 +170,66 @@ static int htree_get_nodes_collections(const HTreeNode* nodes,
 	return HTREE_OK;
 }
 
+static int htree_get_tree_collections(const HTree* tree,
+									  std::vector<h2d::Point2dD>& points,
+									  std::vector<h2d::FRectD>& rects,
+									  std::vector<h2d::OPolyline>& polylines)
+{
+	if (!tree) {
+		return HTREE_BAD_PARAMETER;
+	}
+
+	if (tree->nodes) {
+		int res = htree_get_nodes_collections(tree->nodes, points, rects);
+		if (res != HTREE_OK) {
+			return res;
+		}
+	}
+	
+	if (tree->edges) {
+		for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
+			if (!edge->source || edge->target) continue;
+			if (edge->polyline) {
+				HTreePoint source, target;
+
+				if (edge->source_point) {
+					source = *(edge->source_point);
+				} else if (edge->source->rect) {
+					HTreePoint* center = htree_rect_center_point(edge->source->rect, coordAbsolute);
+					source = *center;
+					htree_destroy_point(center);
+				} else if (edge->source->point) {
+					source = *(edge->source->point);
+				} else {
+					continue;
+				}
+
+				if (edge->target_point) {
+					target = *(edge->target_point);
+				} else if (edge->target->rect) {
+					HTreePoint* center = htree_rect_center_point(edge->target->rect, coordAbsolute);
+					target = *center;
+					htree_destroy_point(center);
+				} else if (edge->target->point) {
+					source = *(edge->target->point);
+				} else {
+					continue;
+				}
+				
+				polylines.push_back(htree_polyline_to_homog(&source, &target, edge->polyline));
+			}
+			if (edge->label_point) {
+				points.push_back(htree_point_to_homog(edge->label_point));
+			}
+			if (edge->label_rect) {
+				rects.push_back(htree_rect_to_homog(edge->label_rect));
+			}
+		}
+	}
+	
+	return HTREE_OK;
+}
+
 static int htree_get_collections(const HTree* trees,
 								 std::vector<h2d::Point2dD>& points,
 								 std::vector<h2d::FRectD>& rects,
@@ -178,27 +244,8 @@ static int htree_get_collections(const HTree* trees,
 	polylines.clear();
 	
 	for (const HTree* tree = trees; tree; tree = tree->next) {
-
-		if (tree->nodes) {
-			int res = htree_get_nodes_collections(tree->nodes, points, rects);
-			if (res != HTREE_OK) {
-				return res;
-			}
-		}
-	
-		if (tree->edges) {
-			for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
-				if (edge->polyline) {
-					polylines.push_back(htree_polyline_to_homog(edge->polyline));
-				}
-				if (edge->label_point) {
-					points.push_back(htree_point_to_homog(edge->label_point));
-				}
-				if (edge->label_rect) {
-					rects.push_back(htree_rect_to_homog(edge->label_rect));
-				}
-			}
-		}
+		int res = htree_get_tree_collections(tree, points, rects, polylines);
+		if (res != HTREE_OK) return res;
 	}
 
 	return HTREE_OK;
@@ -405,39 +452,18 @@ static int htree_build_edges_bounding_rect(HTreeEdge* edges,
 	return HTREE_OK;	
 }*/
 
-static int htree_build_bounding_rect(HTDocument* doc,
-									 HTreeRect** result)
+static int htree_construct_bounding_rect(std::vector<h2d::Point2dD>& points,
+										 std::vector<h2d::FRectD>& rects,
+										 std::vector<h2d::OPolyline>& polylines,
+										 HTreeRect** result)
 {
-	int res;
-	if (!doc) {
-		return HTREE_BAD_PARAMETER;
-	}
-/*
-	for (HTree* tree = doc->trees; tree; tree = tree->next) {
-		HTreeRect sm_rect;
-
-		if (tree->nodes) {
-			htree_build_nodes_bounding_rect(tree->nodes, result);
-		}
-			
-		if (tree->edges) {
-			htree_build_edges_bounding_rect(tree->edges, result);
-		}
-	}
-*/
-
-	std::vector<h2d::Point2dD> points;
-	std::vector<h2d::FRectD> rects;
-	std::vector<h2d::OPolyline> polylines;
-	
-	res = htree_get_collections(doc->trees, points, rects, polylines);
+	h2d::FRectD br;
 
 /*	DEBUG << "BR points: " << points.size() << " rects: " << rects.size() << " pls: " << polylines.size() << std::endl;
 	if (rects.size() > 0) {
 		DEBUG << "rect: " << rects.front() << std::endl;
 		}*/
-	h2d::FRectD br;
-
+	
 	if (points.size() == 1 && rects.size() > 0) {
 		// in a case of a single point we need to add any other point to have a bounding box
 		h2d::FRectD a_rect = rects.front();
@@ -477,12 +503,75 @@ static int htree_build_bounding_rect(HTDocument* doc,
 
 	//DEBUG << "br rect: " << br << std::endl;
 
-	if (!*result) {
-		*result = htree_new_rect();
+	if (result) {
+		if (!*result) {
+			*result = htree_new_rect();
+		}
+		homog_rect_to_htree(br, **result);
 	}
-	homog_rect_to_htree(br, **result);
-	
+
 	return HTREE_OK;
+
+}
+
+static int htree_build_nodes_bounding_rect(HTreeNode* nodes,
+										   HTreeRect** result)
+{
+	int res;
+	if (!nodes) {
+		return HTREE_BAD_PARAMETER;
+	}
+
+	std::vector<h2d::Point2dD> points;
+	std::vector<h2d::FRectD> rects;
+	std::vector<h2d::OPolyline> polylines;
+	
+	res = htree_get_nodes_collections(nodes, points, rects);
+	if (res != HTREE_OK) return res;
+
+	res = htree_construct_bounding_rect(points, rects, polylines, result);
+	
+	return res;
+}
+
+static int htree_build_tree_bounding_rect(HTree* tree,
+										  HTreeRect** result)
+{
+	int res;
+	if (!tree) {
+		return HTREE_BAD_PARAMETER;
+	}
+
+	std::vector<h2d::Point2dD> points;
+	std::vector<h2d::FRectD> rects;
+	std::vector<h2d::OPolyline> polylines;
+	
+	res = htree_get_tree_collections(tree, points, rects, polylines);
+	if (res != HTREE_OK) return res;
+
+	res = htree_construct_bounding_rect(points, rects, polylines, result);
+	
+	return res;
+}
+
+static int htree_build_bounding_rect(HTDocument* doc,
+									 HTreeRect** result)
+{
+	int res;
+	if (!doc) {
+		return HTREE_BAD_PARAMETER;
+	}
+
+	std::vector<h2d::Point2dD> points;
+	std::vector<h2d::FRectD> rects;
+	std::vector<h2d::OPolyline> polylines;
+	
+	res = htree_get_collections(doc->trees, points, rects, polylines);
+	if (res != HTREE_OK) return res;
+
+	res = htree_construct_bounding_rect(points, rects, polylines, result);
+	
+	return res;
 }
 
 static int htree_convert_node_tree_geometry_to_absolute(HTreeNode* nodes,
@@ -1242,9 +1331,109 @@ static int htree_convert_document_geometry_to_format(HTDocument* doc,
 /* -----------------------------------------------------------------------------
  * Geometry transformations interface
  * ----------------------------------------------------------------------------- */
-	
-int htree_reconstruct_document_geometry(HTDocument* doc)
+
+static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_parent)
 {
+	double parent_x, parent_y;
+	
+	if (!parent) {
+		return HTREE_BAD_PARAMETER;
+	}
+
+	if (parent->rect) {
+		parent_x = parent->rect->x;
+		parent_y = parent->rect->y;
+	} else {
+		parent_x = parent_y = 0.0; 
+	}
+
+	//DEBUG << "Reconstruct node geometry: " << parent->id << std::endl;
+	
+	for (HTreeNode* node = parent->children; node; node = node->next) {
+
+		//DEBUG << "Children: " << node->id << " type: " << node->type << std::endl;
+	
+		if (node->type == htPoint) {
+			if (!node->point) {
+				node->point = htree_new_point();
+				node->point->x = parent_x + PADDING;
+				node->point->y = parent_y + PADDING;
+			}
+		} else {
+			if (!node->rect) {
+				node->rect = htree_new_rect();
+				node->rect->x = parent_x + PADDING;
+				node->rect->y = parent_y + PADDING;
+				node->rect->width = NODE_WIDTH;
+				node->rect->height = NODE_HEIGHT;
+			}
+		}
+		if (node->children) {
+			htree_reconstruct_nodes_geometry(node, 1);
+		}
+	}
+	
+	if (reconstruct_parent) {
+		bool empty_rect = !parent->rect; 
+		htree_build_nodes_bounding_rect(parent, &(parent->rect));
+		if (empty_rect && parent->rect) {
+			parent->rect->x -= PADDING;
+			parent->rect->y -= PADDING;
+			parent->rect->width += 2 * PADDING;
+			parent->rect->height += 2 * PADDING;			
+		}
+	}
+		
+	return HTREE_OK;	
+}
+
+static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
+{
+	if (!edges) {
+		return HTREE_BAD_PARAMETER;
+	}
+	return HTREE_OK;
+}
+
+int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm)
+{
+	int res;
+	HTCoordFormat node_coord_format, edge_coord_format, edge_pl_coord_format;
+	HTEdgeFormat edge_format;
+
+	if (!doc || !doc->trees) {
+		return HTREE_BAD_PARAMETER;
+	}
+
+	//DEBUG << "Reconstruct document geometry" << std::endl;
+	//htree_print_document(doc);
+	
+	node_coord_format = doc->node_coord_format;
+	edge_coord_format = doc->edge_coord_format;
+	edge_pl_coord_format = doc->edge_pl_coord_format;
+	edge_format = doc->edge_format;
+
+	htree_convert_document_geometry_to_absolute(doc);
+
+	for (HTree* tree = doc->trees; tree; tree = tree->next) {
+		htree_reconstruct_nodes_geometry(tree->nodes, reconstruct_sm);
+		htree_reconstruct_edges_geometry(tree->edges);
+	}
+
+	if (doc->bounding_rect) {
+		htree_destroy_rect(doc->bounding_rect);
+		doc->bounding_rect = NULL;
+	}
+
+	htree_build_bounding_rect(doc, &(doc->bounding_rect));
+
+	htree_convert_document_geometry_to_format(doc, node_coord_format,
+											  edge_coord_format,
+											  edge_pl_coord_format,
+											  edge_format);
+
+	//htree_print_document(doc);
+	
 	return HTREE_OK;
 }
 
