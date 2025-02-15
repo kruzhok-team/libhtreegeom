@@ -38,13 +38,6 @@ target_link_libraries(htgeom_test PUBLIC htgeom)
 
 install(TARGETS htgeom DESTINATION lib EXPORT htgeom)
 install(FILES htgeom.h
-    	      DESTINATION include/cyberiada)
-install(EXPORT htgeom DESTINATION lib/cmake)
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/htgeom-config.cmake.in
-  ${PROJECT_BINARY_DIR}/htgeom-config.cmake @ONLY)
-
-install(FILES
-  ${PROJECT_BINARY_DIR}/htgeom-config.cmake
-  DESTINATION lib/cmake)
+    	      DESTINATION include/cyberiada)	
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindHTGeom.cmake
+  	      DESTINATION lib/cmake)

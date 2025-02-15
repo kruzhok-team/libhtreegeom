@@ -1,8 +1,0 @@
-get_filename_component(_dir "${CMAKE_CURRENT_LIST_FILE}" PATH)
-get_filename_component(_prefix "${_dir}/../.." ABSOLUTE)
-
-include("${_prefix}/lib/cmake/htgeom.cmake")
-
-set(htgeom_INCLUDE_DIRS "${_prefix}/include/")
-set(htgeom_LIBRARY "${_prefix}/lib/")
-set(htgeom_LIBRARIES "htgeom")
