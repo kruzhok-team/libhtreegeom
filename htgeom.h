@@ -25,6 +25,12 @@
 
 #include <stddef.h>
 
+/* The version of the library corresponds to the Cyberidada-GraphML *
+ *  standard version 1.0                                            */
+
+#define HTREE_GEOM_MAJOR_VERSION 1
+#define HTREE_GEOM_MINOR_VERSION 0
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -50,7 +56,8 @@ typedef enum {
     htTree = 0,             /* a tree */
 	htSimpleNode = 1,       /* a simple rect node */
 	htCompositeNode = 2,    /* a composite rect node */
-	htPoint = 4             /* a point */
+	htRegion = 4,           /* a region node */
+	htPoint = 8             /* a point */
 } HTNodeType;
 
 typedef struct _HTreeNode {
