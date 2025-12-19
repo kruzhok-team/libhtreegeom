@@ -28,7 +28,7 @@
 #include "htgeom_types.h"
 
 #define MAX_STR_LEN	4096
-#define OSTREAM     std::cerr
+#define OSTREAM     std::cout
 
 int htree_copy_string(char** target, size_t* size, const char* source)
 {
@@ -57,6 +57,14 @@ HTreePoint* htree_new_point(void)
 {
 	HTreePoint* p = (HTreePoint*)malloc(sizeof(HTreePoint));
 	memset(p, 0, sizeof(HTreePoint));
+	return p;
+}
+
+HTreePoint* htree_new_point_coord(float x, float y)
+{
+	HTreePoint* p = htree_new_point();
+	p->x = x;
+	p->y = y;
 	return p;
 }
 
@@ -150,6 +158,16 @@ HTreeRect* htree_new_rect(void)
 	return r;
 }
 
+HTreeRect* htree_new_rect_coord(float x, float y, float w, float h)
+{
+	HTreeRect* r = htree_new_rect();
+	r->x = x;
+	r->y = y;
+	r->width = w;
+	r->height = h;
+	return r;
+}
+
 int htree_set_rect(HTreeRect* dst, HTreeRect* src)
 {
 	if (!src || !dst) {
@@ -231,6 +249,31 @@ HTreePolyline* htree_new_polyline(void)
 	return pl;
 }
 
+HTreePolyline* htree_new_polyline_coord(float x, float y)
+{
+	HTreePolyline* pl = htree_new_polyline();
+	pl->point.x = x;
+	pl->point.y = y;	
+	return pl;
+}
+
+void htree_polyline_add_point(HTreePolyline* pl, float x, float y)
+{
+	if (!pl) return ;
+	
+	HTreePolyline* new_point = htree_new_polyline();
+	new_point->point.x = x;
+	new_point->point.y = y;	
+
+	if (pl->next) {
+		HTreePolyline* prev = pl->next;
+		while (prev->next) prev = prev->next;
+		prev->next = new_point;
+	} else {
+		pl->next = new_point;
+	}
+}
+
 int htree_set_polyline(HTreePolyline* dst, HTreePolyline* src)
 {
 	HTreePolyline *dst_pl, *dst_prev, *src_pl;
@@ -309,6 +352,60 @@ HTreeNode* htree_new_node(HTNodeType node_type, const char* _id)
 	htree_copy_string(&(new_node->id), &(new_node->id_len), _id);
 	new_node->type = node_type;
 	return new_node;	
+}
+
+void htree_node_set_rect(HTreeNode* node, float x, float y, float w, float h)
+{
+	if (!node) return ;
+	if (node->rect) {
+		node->rect->x = x;
+		node->rect->y = y;
+		node->rect->width = w;
+		node->rect->height = h;		
+	} else {
+		HTreeRect* r = htree_new_rect_coord(x, y, w, h);
+		node->rect = r;
+	}
+}
+
+void htree_node_set_point(HTreeNode* node, float x, float y)
+{
+	if (!node) return ;
+	if (node->point) {
+		node->point->x = x;
+		node->point->y = y;
+	} else {
+		HTreePoint* p = htree_new_point_coord(x, y);
+		node->point = p;
+	}
+}
+
+void htree_add_sibling_node(HTreeNode* node, HTreeNode* new_node)
+{
+	if (!node || !new_node) return ;
+	if (node->next) {
+		HTreeNode* prev = node->next;
+		while (prev->next) prev = prev->next;
+		prev->next = new_node;
+	} else {
+		node->next = new_node;
+		node->parent->type = htCompositeNode;
+	}
+	new_node->parent = node->parent;
+}
+
+void htree_add_child_node(HTreeNode* node, HTreeNode* new_node)
+{
+	if (!node || !new_node) return ;
+	if (node->children) {
+		HTreeNode* prev = node->children;
+		while (prev->next) prev = prev->next;
+		prev->next = new_node;
+	} else {
+		node->children = new_node;
+		node->type = htCompositeNode;
+	}
+	new_node->parent = node;
 }
 
 HTreeNode* htree_copy_node(HTreeNode* src)
@@ -395,6 +492,27 @@ HTreeEdge* htree_new_edge(const char* _id, const char* source_id, const char* ta
 	return new_edge;	
 }
 
+void htree_edge_set_points(HTreeEdge* edge, float source_x, float source_y, float target_x, float target_y)
+{
+	if (!edge) return ;
+
+	if (edge->source_point) {
+		edge->source_point->x = source_x;
+		edge->source_point->y = source_y;
+	} else {
+		HTreePoint* p = htree_new_point_coord(source_x, source_y);
+		edge->source_point = p;
+	}
+
+	if (edge->target_point) {
+		edge->target_point->x = target_x;
+		edge->target_point->y = target_y;
+	} else {
+		HTreePoint* p = htree_new_point_coord(target_x, target_y);
+		edge->target_point = p;
+	}
+}
+
 HTreeEdge* htree_copy_edge(HTreeEdge* src)
 {
 	HTreeEdge* dst;
@@ -452,6 +570,30 @@ HTree* htree_new_tree(void)
 	HTree* tree = (HTree*)malloc(sizeof(HTree));
 	memset(tree, 0, sizeof(HTree));
 	return tree;
+}
+
+void htree_add_node(HTree* tree, HTreeNode* n)
+{
+	if (!tree || !n) return ;
+	if (tree->nodes) {
+		HTreeNode* prev = tree->nodes;
+		while(prev->next) prev = prev->next;
+		prev->next = n;
+	} else {
+		tree->nodes = n;
+	}
+}
+
+void htree_add_edge(HTree* tree, HTreeEdge* e)
+{
+	if (!tree || !e) return ;
+	if (tree->edges) {
+		HTreeEdge* prev = tree->edges;
+		while(prev->next) prev = prev->next;
+		prev->next = e;
+	} else {
+		tree->edges = e;
+	}
 }
 
 HTree* htree_copy_tree(HTree* src)
@@ -619,6 +761,18 @@ HTDocument* htree_new_document(HTCoordFormat _node_coord_format,
 	doc->edge_pl_coord_format = _edge_pl_coord_format;
 	doc->edge_format = _edge_format;
 	return doc;
+}
+
+void htree_add_tree(HTDocument* doc, HTree* tree)
+{
+	if (!doc || !tree) return ;
+	if (doc->trees) {
+		HTree* prev = doc->trees;
+		while(prev->next) prev = prev->next;
+		prev->next = tree;
+	} else {
+		doc->trees = tree;
+	}
 }
 
 HTDocument* htree_copy_document(HTDocument* src)

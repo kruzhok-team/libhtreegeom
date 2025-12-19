@@ -554,8 +554,7 @@ static int htree_build_tree_bounding_rect(HTree* tree,
 	return res;
 }
 
-static int htree_build_bounding_rect(HTDocument* doc,
-									 HTreeRect** result)
+int htree_build_bounding_rect(HTDocument* doc, HTreeRect** result)
 {
 	int res;
 	if (!doc) {

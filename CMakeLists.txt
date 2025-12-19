@@ -36,6 +36,44 @@ target_include_directories(htgeom_test PUBLIC
 target_link_directories(htgeom_test PUBLIC "${PROJECT_BINARY_DIR}")
 target_link_libraries(htgeom_test PUBLIC htgeom)
 
+file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/")
+file(GLOB files "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp")
+foreach(source_path ${files})
+  get_filename_component(target_name "${source_path}" NAME_WE)
+  string(CONCAT target_name "${target_name}" ".test")
+  add_executable("${target_name}" "${source_path}")
+  target_include_directories("${target_name}" PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+  target_link_directories("${target_name}" PUBLIC "${PROJECT_BINARY_DIR}")
+  target_link_libraries("${target_name}" PUBLIC htgeom)
+  if (WIN32)
+    add_custom_command(TARGET "${target_name}"
+      POST_BUILD
+      COMMAND copy "${PROJECT_BINARY_DIR}/${target_name}" "${PROJECT_BINARY_DIR}/tests/"
+      )
+  else()
+    add_custom_command(TARGET "${target_name}"
+      POST_BUILD
+      COMMAND ln -sf "${PROJECT_BINARY_DIR}/${target_name}" "${PROJECT_BINARY_DIR}/tests/"
+      )
+  endif()
+endforeach()
+
+file(GLOB test_files
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.graphml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.txt"
+  )
+foreach(f ${test_files})
+  get_filename_component(fname "${f}" NAME)
+  file(COPY_FILE
+    "${f}"
+    "${PROJECT_BINARY_DIR}/tests/${fname}"
+    ONLY_IF_DIFFERENT)  
+endforeach()
+
+file(COPY_FILE
+  ${PROJECT_SOURCE_DIR}/run-tests.sh
+  ${PROJECT_BINARY_DIR}/run-tests.sh ONLY_IF_DIFFERENT)
+
 install(TARGETS htgeom DESTINATION lib EXPORT htgeom)
 install(FILES htgeom.h
     	      DESTINATION include/cyberiada)	
