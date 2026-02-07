@@ -334,7 +334,7 @@ static int htree_extend_rect(HTreeRect** result, HTreeRect* src)
  * ----------------------------------------------------------------------------- */
 
 static int htree_convert_point_geometry_to_absolute(HTreePoint* point,
-													HTreePoint* parent,
+													const HTreePoint* parent,
 													HTCoordFormat format)
 {
 	if (!point) {
@@ -352,7 +352,7 @@ static int htree_convert_point_geometry_to_absolute(HTreePoint* point,
 }
 
 static int htree_convert_point_geometry_to_absolute(HTreePoint* point,
-													HTreeRect* parent,
+													const HTreeRect* parent,
 													HTCoordFormat format)
 {
 	if (!point) {
@@ -376,7 +376,7 @@ static int htree_convert_point_geometry_to_absolute(HTreePoint* point,
 }
 
 static int htree_convert_rect_geometry_to_absolute(HTreeRect* rect,
-												   HTreeRect* parent,
+												   const HTreeRect* parent,
 												   HTCoordFormat format)
 {
 	if (!rect) {
@@ -397,7 +397,7 @@ static int htree_convert_rect_geometry_to_absolute(HTreeRect* rect,
 }
 
 static int htree_convert_rect_geometry_to_absolute(HTreeRect* rect,
-												   HTreePoint* parent,
+												   const HTreePoint* parent,
 												   HTCoordFormat format)
 {
 	if (!rect) {
@@ -574,7 +574,7 @@ int htree_build_bounding_rect(HTDocument* doc, HTreeRect** result)
 }
 
 static int htree_convert_node_tree_geometry_to_absolute(HTreeNode* nodes,
-														HTreeRect* parent,
+														const HTreeRect* parent,
 														HTCoordFormat format)
 {
 	if (!nodes || !parent) {
@@ -591,7 +591,7 @@ static int htree_convert_node_tree_geometry_to_absolute(HTreeNode* nodes,
 			htree_convert_rect_geometry_to_absolute(node->rect, parent, format);
 		}
 		if (node->children) {
-			HTreeRect* next_parent;
+			const HTreeRect* next_parent;
 			if (node->rect) {
 				next_parent = node->rect;
 			} else {

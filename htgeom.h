@@ -128,8 +128,8 @@ typedef struct _HTDocument {
 
 	HTreePoint*             htree_new_point(void);
 	HTreePoint*             htree_new_point_coord(float x, float y);
-    HTreePoint*             htree_copy_point(HTreePoint* src);
-    int                     htree_set_point(HTreePoint* dst, HTreePoint* src);
+    HTreePoint*             htree_copy_point(const HTreePoint* src);
+    int                     htree_set_point(HTreePoint* dst, const HTreePoint* src);
 	int                     htree_round_point(HTreePoint* p, unsigned int signs);
 	int                     htree_destroy_point(HTreePoint* p);
 	int                     htree_print_point(const HTreePoint* p);
@@ -137,9 +137,9 @@ typedef struct _HTDocument {
 
 	HTreeRect*              htree_new_rect(void);
 	HTreeRect*              htree_new_rect_coord(float x, float y, float w, float h);
-    HTreeRect*              htree_copy_rect(HTreeRect* src);
+    HTreeRect*              htree_copy_rect(const HTreeRect* src);
 	int                     htree_init_rect(HTreeRect* rect);
-	int                     htree_set_rect(HTreeRect* dst, HTreeRect* src);
+	int                     htree_set_rect(HTreeRect* dst, const HTreeRect* src);
 	int                     htree_round_rect(HTreeRect* r, unsigned int signs);
 	int                     htree_destroy_rect(HTreeRect* r);
 	int                     htree_empty_rect(const HTreeRect* r);
@@ -148,8 +148,8 @@ typedef struct _HTDocument {
 	HTreePolyline*          htree_new_polyline(void);
 	HTreePolyline*          htree_new_polyline_coord(float x, float y);
 	void                    htree_polyline_add_point(HTreePolyline* pl, float x, float y);
-	HTreePolyline*          htree_copy_polyline(HTreePolyline* src);
-	int                     htree_set_polyline(HTreePolyline* dst, HTreePolyline* src);
+	HTreePolyline*          htree_copy_polyline(const HTreePolyline* src);
+	int                     htree_set_polyline(HTreePolyline* dst, const HTreePolyline* src);
 	int                     htree_destroy_polyline(HTreePolyline* polyline);
 
 	HTreeNode*              htree_new_node(HTNodeType node_type, const char* _id);
@@ -157,7 +157,7 @@ typedef struct _HTDocument {
 	void                    htree_node_set_point(HTreeNode* node, float x, float y);
 	void                    htree_add_sibling_node(HTreeNode* node, HTreeNode* new_node);
 	void                    htree_add_child_node(HTreeNode* node, HTreeNode* new_node);
-	HTreeNode*              htree_copy_node(HTreeNode* src);
+	HTreeNode*              htree_copy_node(const HTreeNode* src);
 	HTreeNode*              htree_find_node_by_id(HTreeNode* root, const char* id);
 	int                     htree_destroy_node(HTreeNode* node);
 	int                     htree_node_has_geometry(const HTreeNode* node);
@@ -165,11 +165,11 @@ typedef struct _HTDocument {
 
 	HTreeEdge*              htree_new_edge(const char* _id, const char* source_id, const char* target_id);
 	void                    htree_edge_set_points(HTreeEdge* edge, float source_x, float source_y, float target_x, float target_y);
-	HTreeEdge*              htree_copy_edge(HTreeEdge* src);
+	HTreeEdge*              htree_copy_edge(const HTreeEdge* src);
 	int                     htree_destroy_edge(HTreeEdge* edge);
 
 	HTree*                  htree_new_tree(void);
-	HTree*                  htree_copy_tree(HTree* src);
+	HTree*                  htree_copy_tree(const HTree* src);
 	int                     htree_destroy_tree(HTree* tree);
 	void                    htree_add_node(HTree* tree, HTreeNode* n);
 	void                    htree_add_edge(HTree* tree, HTreeEdge* e);	
@@ -180,7 +180,7 @@ typedef struct _HTDocument {
 											   HTCoordFormat _edge_pl_coord_format,
 											   HTEdgeFormat _edge_format);
 	void                    htree_add_tree(HTDocument* doc, HTree* tree);
-	HTDocument*             htree_copy_document(HTDocument* src);
+	HTDocument*             htree_copy_document(const HTDocument* src);
 	int                     htree_destroy_document(HTDocument* doc);
 	int                     htree_print_document(const HTDocument* doc);
 	int                     htree_build_bounding_rect(HTDocument* doc, HTreeRect** result);

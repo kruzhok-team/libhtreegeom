@@ -68,7 +68,7 @@ HTreePoint* htree_new_point_coord(float x, float y)
 	return p;
 }
 
-int htree_set_point(HTreePoint* dst, HTreePoint* src)
+int htree_set_point(HTreePoint* dst, const HTreePoint* src)
 {
 	if (!dst || !src) {
 		return HTREE_BAD_PARAMETER;
@@ -78,7 +78,7 @@ int htree_set_point(HTreePoint* dst, HTreePoint* src)
 	return HTREE_OK;
 }
 
-HTreePoint* htree_copy_point(HTreePoint* src)
+HTreePoint* htree_copy_point(const HTreePoint* src)
 {
 	HTreePoint* dst;
 	if (!src) {
@@ -168,7 +168,7 @@ HTreeRect* htree_new_rect_coord(float x, float y, float w, float h)
 	return r;
 }
 
-int htree_set_rect(HTreeRect* dst, HTreeRect* src)
+int htree_set_rect(HTreeRect* dst, const HTreeRect* src)
 {
 	if (!src || !dst) {
 		return HTREE_BAD_PARAMETER;
@@ -180,7 +180,7 @@ int htree_set_rect(HTreeRect* dst, HTreeRect* src)
 	return HTREE_OK;
 }
 
-HTreeRect* htree_copy_rect(HTreeRect* src)
+HTreeRect* htree_copy_rect(const HTreeRect* src)
 {
 	HTreeRect* dst;
 	if (!src) {
@@ -274,9 +274,10 @@ void htree_polyline_add_point(HTreePolyline* pl, float x, float y)
 	}
 }
 
-int htree_set_polyline(HTreePolyline* dst, HTreePolyline* src)
+int htree_set_polyline(HTreePolyline* dst, const HTreePolyline* src)
 {
-	HTreePolyline *dst_pl, *dst_prev, *src_pl;
+	HTreePolyline *dst_pl, *dst_prev;
+	const HTreePolyline *src_pl;
 	if (!dst || !src) {
 		return HTREE_BAD_PARAMETER;
 	}
@@ -304,7 +305,7 @@ int htree_set_polyline(HTreePolyline* dst, HTreePolyline* src)
 	return HTREE_OK;
 }
 
-HTreePolyline* htree_copy_polyline(HTreePolyline* src)
+HTreePolyline* htree_copy_polyline(const HTreePolyline* src)
 {
 	HTreePolyline *dst = NULL, *prev, *pl;
 	if (!src) {
@@ -408,7 +409,7 @@ void htree_add_child_node(HTreeNode* node, HTreeNode* new_node)
 	new_node->parent = node;
 }
 
-HTreeNode* htree_copy_node(HTreeNode* src)
+HTreeNode* htree_copy_node(const HTreeNode* src)
 {
 	HTreeNode *dst, *n, *dst_child, *src_child;
 	if (!src || !(src->id)) {
@@ -513,7 +514,7 @@ void htree_edge_set_points(HTreeEdge* edge, float source_x, float source_y, floa
 	}
 }
 
-HTreeEdge* htree_copy_edge(HTreeEdge* src)
+HTreeEdge* htree_copy_edge(const HTreeEdge* src)
 {
 	HTreeEdge* dst;
 	if (!src) {
@@ -596,7 +597,7 @@ void htree_add_edge(HTree* tree, HTreeEdge* e)
 	}
 }
 
-HTree* htree_copy_tree(HTree* src)
+HTree* htree_copy_tree(const HTree* src)
 {
 	HTree *result = NULL, *dst;
 	HTreeNode* node, *new_node, *prev_node;
@@ -775,7 +776,7 @@ void htree_add_tree(HTDocument* doc, HTree* tree)
 	}
 }
 
-HTDocument* htree_copy_document(HTDocument* src)
+HTDocument* htree_copy_document(const HTDocument* src)
 {
 	HTDocument* dst;
 	if (!src) {
