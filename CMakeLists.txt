@@ -79,3 +79,11 @@ install(FILES htgeom.h
     	      DESTINATION include/cyberiada)	
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindHTGeom.cmake
   	      DESTINATION lib/cmake)
+
+configure_file ("${PROJECT_SOURCE_DIR}/HTreeCPackOptions.cmake.in"
+                "${PROJECT_BINARY_DIR}/HTreeCPackOptions.cmake"
+                @ONLY)
+set (CPACK_PROJECT_CONFIG_FILE
+     "${PROJECT_BINARY_DIR}/HTreeCPackOptions.cmake")
+
+include(CPack)
