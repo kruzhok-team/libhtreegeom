@@ -355,8 +355,12 @@ static int htree_convert_point_geometry_to_absolute(HTreePoint* point,
 	if (!point) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (format == coordNone || format == coordAbsolute) {
+	if (format == coordNone) {
 		return HTREE_BAD_PARAMETER;
+	}
+	if (format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
 	}
 	if (parent == NULL) { // no parent
 		return HTREE_OK;
@@ -373,8 +377,12 @@ static int htree_convert_point_geometry_to_absolute(HTreePoint* point,
 	if (!point) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (format == coordNone || format == coordAbsolute) {
+	if (format == coordNone) {
 		return HTREE_BAD_PARAMETER;
+	}
+	if (format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
 	}
 	if (parent == NULL) { // no parent
 		return HTREE_OK;
@@ -397,8 +405,15 @@ static int htree_convert_rect_geometry_to_absolute(HTreeRect* rect,
 	if (!rect) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (format == coordNone || format == coordAbsolute) {
+	if (format == coordNone) {
 		return HTREE_BAD_PARAMETER;
+	}
+	if (format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
+	}
+	if (parent == NULL) { // no parent
+		return HTREE_OK;
 	}
 	if (format == coordLeftTop) {
 		rect->x += parent->x;
@@ -418,10 +433,16 @@ static int htree_convert_rect_geometry_to_absolute(HTreeRect* rect,
 	if (!rect) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (format == coordNone || format == coordAbsolute) {
+	if (format == coordNone) {
 		return HTREE_BAD_PARAMETER;
 	}
-
+	if (format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
+	}
+	if (parent == NULL) { // no parent
+		return HTREE_OK;
+	}
 	rect->x += parent->x;
 	rect->y += parent->y;		
 
@@ -472,61 +493,56 @@ static int htree_construct_bounding_rect(std::vector<h2d::Point2dD>& points,
 										 std::vector<h2d::OPolyline>& polylines,
 										 HTreeRect** result)
 {
-	h2d::FRectD br;
+	/* a manual min/max fold: h2d::getBB throws on degenerate
+	   (single-point or collinear) collections */
+	bool found = false;
+	double min_x = 0.0, min_y = 0.0, max_x = 0.0, max_y = 0.0;
 
-/*	DEBUG << "BR points: " << points.size() << " rects: " << rects.size() << " pls: " << polylines.size() << std::endl;
-	if (rects.size() > 0) {
-		DEBUG << "rect: " << rects.front() << std::endl;
-		}*/
-	
-	if (points.size() == 1 && rects.size() > 0) {
-		// in a case of a single point we need to add any other point to have a bounding box
-		h2d::FRectD a_rect = rects.front();
-		h2d::Point2dD a_point = a_rect.getPts().first;
-		points.push_back(a_point);
-	}
-	
-	if (points.size() > 0) {
-		try {
-			rects.push_back(h2d::getBB(points));
-		} catch (const std::runtime_error& e) {
-		}
+	if (!result) {
+		return HTREE_BAD_PARAMETER;
 	}
 
-	if (polylines.size() > 0) {
-		try {
-			rects.push_back(h2d::getBB(polylines));
-		} catch (const std::runtime_error& e) {
-		}
-	}
-
-	if (rects.size() == 0) {
-		// empty bounding rect
-		if (*result) {
-			HTreeRect* r = *result;
-			r->x = r->y = r->width = r->height = 0.0;
+	auto add_point = [&](double x, double y) {
+		if (!found) {
+			min_x = max_x = x;
+			min_y = max_y = y;
+			found = true;
 		} else {
-			*result = htree_new_rect();
+			if (x < min_x) min_x = x;
+			if (x > max_x) max_x = x;
+			if (y < min_y) min_y = y;
+			if (y > max_y) max_y = y;
 		}
-		return HTREE_OK;
+	};
+
+	for (const h2d::Point2dD& p : points) {
+		add_point(p.getX(), p.getY());
+	}
+	for (const h2d::FRectD& r : rects) {
+		auto pts = r.getPts();
+		add_point(pts.first.getX(), pts.first.getY());
+		add_point(pts.second.getX(), pts.second.getY());
+	}
+	for (const h2d::OPolyline& pl : polylines) {
+		for (const h2d::Point2dD& p : pl.getPts()) {
+			add_point(p.getX(), p.getY());
+		}
 	}
 
-	try {
-		br = h2d::getBB(rects);
-	} catch (const std::runtime_error& e) {
-	} 
-
-	//DEBUG << "br rect: " << br << std::endl;
-
-	if (result) {
-		if (!*result) {
-			*result = htree_new_rect();
-		}
-		homog_rect_to_htree(br, **result);
+	if (!*result) {
+		*result = htree_new_rect();
+	}
+	if (found) {
+		(*result)->x = min_x;
+		(*result)->y = min_y;
+		(*result)->width = max_x - min_x;
+		(*result)->height = max_y - min_y;
+	} else {
+		// empty bounding rect
+		htree_init_rect(*result);
 	}
 
 	return HTREE_OK;
-
 }
 
 static int htree_build_nodes_bounding_rect(HTreeNode* nodes,
@@ -601,8 +617,12 @@ int htree_check_geometry(const HTDocument* doc)
 	if (!copy) {
 		return HTREE_BAD_PARAMETER;
 	}
-	htree_convert_document_geometry(copy, coordAbsolute, coordAbsolute,
-									coordAbsolute, edgeBorder);
+	res = htree_convert_document_geometry(copy, coordAbsolute, coordAbsolute,
+										  coordAbsolute, edgeBorder);
+	if (res != HTREE_OK) {
+		htree_destroy_document(copy);
+		return res;
+	}
 
 	for (HTree* tree = copy->trees; tree; tree = tree->next) {
 		/* only the trees with the explicit SM border are constrained */
@@ -614,12 +634,21 @@ int htree_check_geometry(const HTDocument* doc)
 		std::vector<h2d::FRectD> rects;
 		std::vector<h2d::OPolyline> polylines;
 		if (tree->nodes->children) {
-			htree_get_nodes_collections(tree->nodes->children, points, rects);
+			res = htree_get_nodes_collections(tree->nodes->children, points, rects);
+			if (res != HTREE_OK) {
+				break;
+			}
 		}
-		htree_get_edges_collections(tree->edges, points, rects, polylines);
+		res = htree_get_edges_collections(tree->edges, points, rects, polylines);
+		if (res != HTREE_OK) {
+			break;
+		}
 
 		HTreeRect* content = NULL;
-		htree_construct_bounding_rect(points, rects, polylines, &content);
+		res = htree_construct_bounding_rect(points, rects, polylines, &content);
+		if (res != HTREE_OK) {
+			break;
+		}
 		if (content) {
 			if (!htree_empty_rect(content)) {
 				const HTreeRect* b = tree->nodes->rect;
@@ -651,12 +680,16 @@ static int htree_convert_node_tree_geometry_to_absolute(HTreeNode* nodes,
 
 	for (HTreeNode* node = nodes; node; node = node->next) {
 		if (node->point) {
-			//DEBUG << "convert point " << node->point << " with parent " << parent << " and format " << format << std::endl;
-			htree_convert_point_geometry_to_absolute(node->point, parent, format);
-			//DEBUG << "result " << node->point << std::endl;
+			int res = htree_convert_point_geometry_to_absolute(node->point, parent, format);
+			if (res != HTREE_OK) {
+				return res;
+			}
 		}
 		if (node->rect) {
-			htree_convert_rect_geometry_to_absolute(node->rect, parent, format);
+			int res = htree_convert_rect_geometry_to_absolute(node->rect, parent, format);
+			if (res != HTREE_OK) {
+				return res;
+			}
 		}
 		if (node->children) {
 			const HTreeRect* next_parent;
@@ -689,12 +722,21 @@ static int htree_convert_nodes_geometry_to_absolute(HTDocument* doc)
 	HTreeRect parent_rect;
 	htree_init_rect(&parent_rect);
 	if (doc->node_coord_format == coordLocalCenter && doc->bounding_rect && !htree_has_toplevel_rect(doc)) {
-		htree_convert_rect_geometry_to_absolute(doc->bounding_rect, &parent_rect, coordLocalCenter);
+		int res = htree_convert_rect_geometry_to_absolute(doc->bounding_rect, &parent_rect, coordLocalCenter);
+		if (res != HTREE_OK) {
+			return res;
+		}
 		// DEBUG << "use bounding rect " << doc->bounding_rect << " as parent" << std::endl;
 		htree_set_rect(&parent_rect, doc->bounding_rect);
 	}
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
-		htree_convert_node_tree_geometry_to_absolute(tree->nodes, &parent_rect, doc->node_coord_format);
+		if (!tree->nodes) {
+			continue;
+		}
+		int res = htree_convert_node_tree_geometry_to_absolute(tree->nodes, &parent_rect, doc->node_coord_format);
+		if (res != HTREE_OK) {
+			return res;
+		}
 	}
 	
 	return HTREE_OK;
@@ -702,6 +744,8 @@ static int htree_convert_nodes_geometry_to_absolute(HTDocument* doc)
 
 static int htree_convert_edges_geometry_to_absolute_points(HTDocument* doc)
 {
+	int res;
+
 	if (!doc) {
 		return HTREE_BAD_PARAMETER;
 	}
@@ -716,36 +760,45 @@ static int htree_convert_edges_geometry_to_absolute_points(HTDocument* doc)
 				edge->target && (edge->target->rect || edge->target->point)) {
 				if (edge->source_point) {
 					if (edge->source->rect) {
-						htree_convert_point_geometry_to_absolute(edge->source_point,
-																 edge->source->rect,
-																 doc->edge_coord_format);
+						res = htree_convert_point_geometry_to_absolute(edge->source_point,
+																	   edge->source->rect,
+																	   doc->edge_coord_format);
 					} else {
-						htree_convert_point_geometry_to_absolute(edge->source_point,
-																 edge->source->point,
-																 doc->edge_coord_format);
+						res = htree_convert_point_geometry_to_absolute(edge->source_point,
+																	   edge->source->point,
+																	   doc->edge_coord_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 				if (edge->target_point) {
 					if (edge->target->rect) {
-						htree_convert_point_geometry_to_absolute(edge->target_point,
-																 edge->target->rect,
-																 doc->edge_coord_format);
+						res = htree_convert_point_geometry_to_absolute(edge->target_point,
+																	   edge->target->rect,
+																	   doc->edge_coord_format);
 					} else {
-						htree_convert_point_geometry_to_absolute(edge->target_point,
-																 edge->target->point,
-																 doc->edge_coord_format);
+						res = htree_convert_point_geometry_to_absolute(edge->target_point,
+																	   edge->target->point,
+																	   doc->edge_coord_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 				if (edge->polyline) {
 					for (HTreePolyline* pl = edge->polyline; pl; pl = pl->next) {
 						if (edge->source->rect) {
-							htree_convert_point_geometry_to_absolute(&(pl->point),
-																	 edge->source->rect,
-																	 doc->edge_pl_coord_format);
+							res = htree_convert_point_geometry_to_absolute(&(pl->point),
+																		   edge->source->rect,
+																		   doc->edge_pl_coord_format);
 						} else {
-							htree_convert_point_geometry_to_absolute(&(pl->point),
-																	 edge->source->point,
-																	 doc->edge_pl_coord_format);
+							res = htree_convert_point_geometry_to_absolute(&(pl->point),
+																		   edge->source->point,
+																		   doc->edge_pl_coord_format);
+						}
+						if (res != HTREE_OK) {
+							return res;
 						}
 					}
 				}
@@ -780,8 +833,6 @@ static int htree_convert_edges_geometry_to_absolute_points(HTDocument* doc)
 
 static int htree_convert_edges_geometry_to_absolute_borders(HTDocument* doc)
 {
-	int res;
-	
 	if (!doc) {
 		return HTREE_BAD_PARAMETER;
 	}
@@ -859,6 +910,8 @@ static int htree_convert_edges_geometry_to_absolute_borders(HTDocument* doc)
 
 static int htree_convert_edges_geometry_to_absolute_labels(HTDocument* doc)
 {
+	int res;
+
 	if (!doc) {
 		return HTREE_BAD_PARAMETER;
 	}
@@ -875,28 +928,34 @@ static int htree_convert_edges_geometry_to_absolute_labels(HTDocument* doc)
 						doc->edge_pl_coord_format == coordAbsolute &&
 						doc->edge_format == edgeCenter) {
 
-						htree_convert_point_geometry_to_absolute(edge->label_point,
-																 edge->source_point,
-																 doc->edge_coord_format);						
+						res = htree_convert_point_geometry_to_absolute(edge->label_point,
+																	   edge->source_point,
+																	   doc->edge_coord_format);
 					} else if (edge->source->rect) {
-						htree_convert_point_geometry_to_absolute(edge->label_point,
-																 edge->source->rect,
-																 doc->edge_coord_format);
+						res = htree_convert_point_geometry_to_absolute(edge->label_point,
+																	   edge->source->rect,
+																	   doc->edge_coord_format);
 					} else {
-						htree_convert_point_geometry_to_absolute(edge->label_point,
-																 edge->source->point,
-																 doc->edge_coord_format);
+						res = htree_convert_point_geometry_to_absolute(edge->label_point,
+																	   edge->source->point,
+																	   doc->edge_coord_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 				if (edge->label_rect) {
 					if (edge->source->rect) {
-						htree_convert_rect_geometry_to_absolute(edge->label_rect,
-																edge->source->rect,
-																doc->edge_coord_format);
+						res = htree_convert_rect_geometry_to_absolute(edge->label_rect,
+																	  edge->source->rect,
+																	  doc->edge_coord_format);
 					} else {
-						htree_convert_rect_geometry_to_absolute(edge->label_rect,
-																edge->source->point,
-																doc->edge_coord_format);
+						res = htree_convert_rect_geometry_to_absolute(edge->label_rect,
+																	  edge->source->point,
+																	  doc->edge_coord_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 			}
@@ -983,8 +1042,12 @@ static int htree_convert_point_geometry_to_format(HTreePoint* point,
 	if (!point) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (format == coordNone || format == coordAbsolute) {
+	if (format == coordNone) {
 		return HTREE_BAD_PARAMETER;
+	}
+	if (format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
 	}
 	if (parent == NULL) { // no parent
 		return HTREE_OK;
@@ -1006,8 +1069,12 @@ static int htree_convert_point_geometry_to_format(HTreePoint* point,
 	if (!point) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (format == coordNone || format == coordAbsolute) {
+	if (format == coordNone) {
 		return HTREE_BAD_PARAMETER;
+	}
+	if (format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
 	}
 	if (parent == NULL) { // no parent
 		return HTREE_OK;
@@ -1034,10 +1101,16 @@ static int htree_convert_rect_geometry_to_format(HTreeRect* rect,
 	if (!rect) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (new_format == coordNone || new_format == coordAbsolute) {
+	if (new_format == coordNone) {
 		return HTREE_BAD_PARAMETER;
 	}
-
+	if (new_format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
+	}
+	if (parent == NULL) { // no parent
+		return HTREE_OK;
+	}
 	rect->x -= parent->x;
 	rect->y -= parent->y;		
 
@@ -1051,8 +1124,15 @@ static int htree_convert_rect_geometry_to_format(HTreeRect* rect,
 	if (!rect) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (new_format == coordNone || new_format == coordAbsolute) {
+	if (new_format == coordNone) {
 		return HTREE_BAD_PARAMETER;
+	}
+	if (new_format == coordAbsolute) {
+		/* already in the target format */
+		return HTREE_OK;
+	}
+	if (parent == NULL) { // no parent
+		return HTREE_OK;
 	}
 	if (new_format == coordLeftTop) {
 		rect->x -= parent->x;
@@ -1087,10 +1167,16 @@ static int htree_convert_node_tree_geometry_to_format(HTreeNode* nodes,
 			}
 		}
 		if (node->point) {
-			htree_convert_point_geometry_to_format(node->point, parent, format);
+			int res = htree_convert_point_geometry_to_format(node->point, parent, format);
+			if (res != HTREE_OK) {
+				return res;
+			}
 		}
 		if (node->rect) {
-			htree_convert_rect_geometry_to_format(node->rect, parent, format);
+			int res = htree_convert_rect_geometry_to_format(node->rect, parent, format);
+			if (res != HTREE_OK) {
+				return res;
+			}
 		}
 	}
 	
@@ -1113,9 +1199,15 @@ static int htree_convert_nodes_geometry_to_format(HTDocument* doc,
 		htree_set_rect(&parent_rect, doc->bounding_rect);
 	}
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
-		htree_convert_node_tree_geometry_to_format(tree->nodes,
-												   &parent_rect,
-												   new_format);
+		if (!tree->nodes) {
+			continue;
+		}
+		int res = htree_convert_node_tree_geometry_to_format(tree->nodes,
+															 &parent_rect,
+															 new_format);
+		if (res != HTREE_OK) {
+			return res;
+		}
 	}
 	return HTREE_OK;
 }
@@ -1124,6 +1216,8 @@ static int htree_convert_edges_geometry_to_format_points(HTDocument* doc,
 														 HTCoordFormat edge_format,
 														 HTCoordFormat edge_pl_format)
 {
+	int res;
+
 	if (!doc) {
 		return HTREE_BAD_PARAMETER;
 	}
@@ -1136,36 +1230,45 @@ static int htree_convert_edges_geometry_to_format_points(HTDocument* doc,
 				edge->target && (edge->target->rect || edge->target->point)) {
 				if (edge->source_point) {
 					if (edge->source->rect) {
-						htree_convert_point_geometry_to_format(edge->source_point,
-															   edge->source->rect,
-															   edge_format);
+						res = htree_convert_point_geometry_to_format(edge->source_point,
+																	 edge->source->rect,
+																	 edge_format);
 					} else {
-						htree_convert_point_geometry_to_format(edge->source_point,
-															   edge->source->point,
-															   edge_format);
+						res = htree_convert_point_geometry_to_format(edge->source_point,
+																	 edge->source->point,
+																	 edge_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 				if (edge->target_point) {
 					if (edge->target->rect) {
-						htree_convert_point_geometry_to_format(edge->target_point,
-															   edge->target->rect,
-															   edge_format);
+						res = htree_convert_point_geometry_to_format(edge->target_point,
+																	 edge->target->rect,
+																	 edge_format);
 					} else {
-						htree_convert_point_geometry_to_format(edge->target_point,
-															   edge->target->point	,
-															   edge_format);
+						res = htree_convert_point_geometry_to_format(edge->target_point,
+																	 edge->target->point,
+																	 edge_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 				if (edge->polyline) {
 					for (HTreePolyline* pl = edge->polyline; pl; pl = pl->next) {
 						if (edge->source->rect) {
-							htree_convert_point_geometry_to_format(&(pl->point),
-																   edge->source->rect,
-																   edge_pl_format);
+							res = htree_convert_point_geometry_to_format(&(pl->point),
+																		 edge->source->rect,
+																		 edge_pl_format);
 						} else {
-							htree_convert_point_geometry_to_format(&(pl->point),
-																   edge->source->point,
-																   edge_pl_format);
+							res = htree_convert_point_geometry_to_format(&(pl->point),
+																		 edge->source->point,
+																		 edge_pl_format);
+						}
+						if (res != HTREE_OK) {
+							return res;
 						}
 					}
 				}
@@ -1281,6 +1384,8 @@ static int htree_convert_edges_geometry_to_format_labels(HTDocument* doc,
 														 HTCoordFormat new_pl_format,
 														 HTEdgeFormat new_edge_format)
 {
+	int res;
+
 	if (!doc) {
 		return HTREE_BAD_PARAMETER;
 	}
@@ -1296,28 +1401,34 @@ static int htree_convert_edges_geometry_to_format_labels(HTDocument* doc,
 						new_pl_format == coordAbsolute &&
 						new_edge_format == edgeCenter) {
 
-						htree_convert_point_geometry_to_format(edge->label_point,
-															   edge->source_point,
-															   new_format);						
+						res = htree_convert_point_geometry_to_format(edge->label_point,
+																	 edge->source_point,
+																	 new_format);
 					} else if (edge->source->rect) {
-						htree_convert_point_geometry_to_format(edge->label_point,
-															   edge->source->rect,
-															   new_format);
+						res = htree_convert_point_geometry_to_format(edge->label_point,
+																	 edge->source->rect,
+																	 new_format);
 					} else {
-						htree_convert_point_geometry_to_format(edge->label_point,
-															   edge->source->point,
-															   new_format);
+						res = htree_convert_point_geometry_to_format(edge->label_point,
+																	 edge->source->point,
+																	 new_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 				if (edge->label_rect) {
 					if (edge->source->rect) {
-						htree_convert_rect_geometry_to_format(edge->label_rect,
-															  edge->source->rect,
-															  new_format);
+						res = htree_convert_rect_geometry_to_format(edge->label_rect,
+																	edge->source->rect,
+																	new_format);
 					} else {
-						htree_convert_rect_geometry_to_format(edge->label_rect,
-															  edge->source->point,
-															  new_format);
+						res = htree_convert_rect_geometry_to_format(edge->label_rect,
+																	edge->source->point,
+																	new_format);
+					}
+					if (res != HTREE_OK) {
+						return res;
 					}
 				}
 			}
@@ -1387,7 +1498,10 @@ static int htree_convert_document_geometry_to_format(HTDocument* doc,
 	}
 	HTreeRect parent;
 	htree_init_rect(&parent);
-	htree_convert_rect_geometry_to_format(doc->bounding_rect, &parent, new_node_coord_format);
+	res = htree_convert_rect_geometry_to_format(doc->bounding_rect, &parent, new_node_coord_format);
+	if (res != HTREE_OK) {
+		return res;
+	}
 	doc->node_coord_format = new_node_coord_format;	
 	doc->edge_coord_format = new_edge_coord_format;	
 	doc->edge_pl_coord_format = new_edge_pl_coord_format;	
@@ -1436,13 +1550,19 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_p
 			}
 		}
 		if (node->children) {
-			htree_reconstruct_nodes_geometry(node, 1);
+			int res = htree_reconstruct_nodes_geometry(node, 1);
+			if (res != HTREE_OK) {
+				return res;
+			}
 		}
 	}
 	
 	if (reconstruct_parent) {
 		bool empty_rect = !parent->rect; 
-		htree_build_nodes_bounding_rect(parent, &(parent->rect));
+		int res = htree_build_nodes_bounding_rect(parent, &(parent->rect));
+		if (res != HTREE_OK) {
+			return res;
+		}
 		if (empty_rect && parent->rect) {
 			parent->rect->x -= PADDING;
 			parent->rect->y -= PADDING;
@@ -1456,9 +1576,8 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_p
 
 static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 {
-	if (!edges) {
-		return HTREE_BAD_PARAMETER;
-	}
+	/* the edge reconstruction is not implemented yet */
+	(void)edges;
 	return HTREE_OK;
 }
 
@@ -1480,11 +1599,22 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm)
 	edge_pl_coord_format = doc->edge_pl_coord_format;
 	edge_format = doc->edge_format;
 
-	htree_convert_document_geometry_to_absolute(doc);
+	res = htree_convert_document_geometry_to_absolute(doc);
+	if (res != HTREE_OK) {
+		return res;
+	}
 
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
-		htree_reconstruct_nodes_geometry(tree->nodes, reconstruct_sm);
-		htree_reconstruct_edges_geometry(tree->edges);
+		if (tree->nodes) {
+			res = htree_reconstruct_nodes_geometry(tree->nodes, reconstruct_sm);
+			if (res != HTREE_OK) {
+				return res;
+			}
+		}
+		res = htree_reconstruct_edges_geometry(tree->edges);
+		if (res != HTREE_OK) {
+			return res;
+		}
 	}
 
 	if (doc->bounding_rect) {
@@ -1492,16 +1622,15 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm)
 		doc->bounding_rect = NULL;
 	}
 
-	htree_build_bounding_rect(doc, &(doc->bounding_rect));
+	res = htree_build_bounding_rect(doc, &(doc->bounding_rect));
+	if (res != HTREE_OK) {
+		return res;
+	}
 
-	htree_convert_document_geometry_to_format(doc, node_coord_format,
-											  edge_coord_format,
-											  edge_pl_coord_format,
-											  edge_format);
-
-	//htree_print_document(doc);
-	
-	return HTREE_OK;
+	return htree_convert_document_geometry_to_format(doc, node_coord_format,
+													 edge_coord_format,
+													 edge_pl_coord_format,
+													 edge_format);
 }
 
 int htree_convert_document_geometry(HTDocument* doc,
@@ -1514,6 +1643,14 @@ int htree_convert_document_geometry(HTDocument* doc,
 	if (!doc) {
 		return HTREE_BAD_PARAMETER;
 	}
+	if (!doc->trees) {
+		/* an empty document: just switch the format fields */
+		doc->node_coord_format = new_node_coord_format;
+		doc->edge_coord_format = new_edge_coord_format;
+		doc->edge_pl_coord_format = new_edge_pl_coord_format;
+		doc->edge_format = new_edge_format;
+		return HTREE_OK;
+	}
 
 /*	DEBUG << "Start format: node coord " << doc->node_coord_format <<
 		" edge coord " << doc->edge_coord_format <<
@@ -1522,13 +1659,19 @@ int htree_convert_document_geometry(HTDocument* doc,
 
 		htree_print_document(doc);*/
 	
-	htree_convert_document_geometry_to_absolute(doc);
+	res = htree_convert_document_geometry_to_absolute(doc);
+	if (res != HTREE_OK) {
+		return res;
+	}
 
 	if (doc->bounding_rect) {
 		htree_destroy_rect(doc->bounding_rect);
 		doc->bounding_rect = NULL;
 	}
-	htree_build_bounding_rect(doc, &(doc->bounding_rect));
+	res = htree_build_bounding_rect(doc, &(doc->bounding_rect));
+	if (res != HTREE_OK) {
+		return res;
+	}
 	
 /*	DEBUG << "Absolute format: node coord " << doc->node_coord_format <<
 		" edge coord " << doc->edge_coord_format <<
@@ -1537,18 +1680,9 @@ int htree_convert_document_geometry(HTDocument* doc,
 
 		htree_print_document(doc);*/
 	
-	htree_convert_document_geometry_to_format(doc,
-											  new_node_coord_format,
-											  new_edge_coord_format,
-											  new_edge_pl_coord_format,
-											  new_edge_format);
-	
-/*	DEBUG << "Final format: node coord " << doc->node_coord_format <<
-		" edge coord " << doc->edge_coord_format <<
-		" edge coord " << doc->edge_pl_coord_format <<
-		" edge " << doc->edge_format << std::endl;
-	
-		htree_print_document(doc);*/
-	
-	return HTREE_OK;
+	return htree_convert_document_geometry_to_format(doc,
+													 new_node_coord_format,
+													 new_edge_coord_format,
+													 new_edge_pl_coord_format,
+													 new_edge_format);
 }

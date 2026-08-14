@@ -36,7 +36,7 @@ int main()
 	htree_print_document(doc);
 	htree_destroy_document(doc);
 
-	/* a single point node: no rects to bound, the rect is zeroed */
+	/* a single point node: the zero-size rect at the point */
 	doc = htree_new_document(coordAbsolute, coordAbsolute, coordAbsolute, edgeBorder);
 	tree = htree_new_tree();
 	htree_add_tree(doc, tree);

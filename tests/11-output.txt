@@ -1,0 +1,7 @@
+convert NULL: 1
+convert yed to left-top: 0
+HTreeDocument {nodes coord: 2, edge coord: 2, edge polylines coord: 2, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 0, y: 0, w: 100, h: 100)}, HTreeNode {id: b, rect: (x: 200, y: 0, w: 100, h: 100)}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 100, y: 50), target point: (x: 0, y: 50), label point: (x: 110, y: 60), polyline: Polyline [(x: 120, y: 50), (x: 180, y: 50)]}]}], bounding rect: (x: 0, y: 0, w: 300, h: 100)}
+reconstruct without edges: 0
+bounding rect into NULL: 1
+degenerate bounding rect: 0 (x: 10, y: 50, w: 80, h: 0)
+(x: 1, y: 2)

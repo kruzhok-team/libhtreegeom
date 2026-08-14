@@ -145,9 +145,9 @@ HTreePoint* htree_rect_center_point(const HTreeRect* r, HTCoordFormat geometry_f
 	return point;
 }
 
-int htree_print_point(const HTreeRect* r)
+int htree_print_point(const HTreePoint* p)
 {
-	OSTREAM << r;
+	OSTREAM << p;
 	return HTREE_OK;
 }
 

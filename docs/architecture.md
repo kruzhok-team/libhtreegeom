@@ -133,10 +133,10 @@ rebuilds composite parents' rects from their children's bounding box.
 
 `htgeom.cpp` wraps homog2d behind small adapters -
 `htree_point_to_homog`, `htree_rect_to_homog`, `htree_polyline_to_homog`
-and the reverse `homog_*_to_htree` functions. The engine is used for two
-things only: bounding boxes (`h2d::getBB` over collected points, rects
-and polylines) and edge border projection (`h2d::Segment::intersects`
-with a rect). The document bounding rect unites the node rects and
+and the reverse `homog_*_to_htree` functions. The engine is used for the
+collected geometry containers and the edge border projection
+(`h2d::Segment::intersects` with a rect); the bounding boxes are folded
+manually (min/max), since `h2d::getBB` rejects degenerate collections. The document bounding rect unites the node rects and
 points with the edge geometry of resolved edges: polylines (including
 their source/target endpoints) and label points and rects; straight-edge
 source/target points alone do not extend it. A tree whose single root is
@@ -169,8 +169,8 @@ suite is run with `ctest --output-on-failure` (or `run-tests.sh`, which
 rebuilds in Debug mode first). Test 01 covers the empty document, test
 02 a full tree with edges, tests 03-09 the bounding rect cases (empty
 and degenerate documents, node unions, edge polylines, loop edges,
-labels, the explicit SM border), test 10 the geometry validity check.
-No test exercises format conversion or reconstruction.
+labels, the explicit SM border), test 10 the geometry validity check,
+test 11 the transform error codes and the yEd format conversion.
 
 ## Known Gaps
 
@@ -181,16 +181,8 @@ No test exercises format conversion or reconstruction.
   non-compiling draft (htgeom.cpp:1111-1209) and its call site is
   commented out too (htgeom.cpp:1286-1293), so converting to `edgeCenter`
   updates the `edge_format` field while the points stay on the borders.
-* `htree_print_point` is declared for `const HTreePoint*` (htgeom.h:135)
-  but defined for `const HTreeRect*` (htgeom_types.cpp:148); the declared
-  C symbol is never defined and the body prints the pointer value.
 * `htree_polyline_to_homog` skips the vertex of a single-point polyline
   (htgeom.cpp:107) — only the source and target points enter the
   bounding-rect collection.
 * `htree_compare_rects` (htgeom_types.cpp:209) is implemented but not
   declared in `htgeom.h`.
-* The public entry points ignore the return codes of the internal
-  conversion passes and always return `HTREE_OK`.
-* `htree_build_bounding_rect` reads `*result` before assigning it
-  (htgeom.cpp:490, 507), so the caller must pass a NULL-initialized
-  pointer; the library does not guard against garbage input.
