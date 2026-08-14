@@ -18,13 +18,13 @@ header-only homog2d library.
                 |  C calls
                 v
      htgeom.h (extern "C")
-    +------------------------+
-    |  public C API          |
-    +------------------------+
-         |            |
-         | lifecycle  | transforms
-         v            v
-     htgeom_types.cpp          htgeom.cpp                homog2d.hpp
+    +------------------------------------+
+    |  public C API                      |
+    +------------------------------------+
+         |                          |
+         | lifecycle                | transforms
+         v                          v
+     htgeom_types.cpp           htgeom.cpp                 homog2d.hpp
     +------------------------+ +------------------------+ +------------------------+
     |  type layer:           | |  transform layer:      | |  vendored geometry     |
     |  alloc/copy/set/       | |  format pipelines,     | |  engine: getBB,        |
@@ -153,13 +153,14 @@ back into the model and destroys the document.
 ## Building and Testing
 
 CMake builds the shared `htgeom` library from the two `.cpp` files and
-one `<NN>-<name>.test` executable per `tests/*.cpp` file. `run-tests.sh`
-(run from a build directory) rebuilds in Debug mode, runs every test
+one `<NN>-<name>.test` executable per `tests/*.cpp` file, registered
+with CTest. Each test prints its document through the `operator<<`
+overloads of `htgeom_types.h`; `cmake/RunDiffTest.cmake` runs the
 binary and byte-compares its stdout with `tests/<NN>-output.txt`. The
-tests print documents through the `operator<<` overloads of
-`htgeom_types.h`; test 01 covers the empty document, test 02 a full tree
-with edges and its bounding rect. No test exercises format conversion or
-reconstruction.
+suite is run with `ctest --output-on-failure` (or `run-tests.sh`, which
+rebuilds in Debug mode first). Test 01 covers the empty document, test
+02 a full tree with edges and its bounding rect. No test exercises
+format conversion or reconstruction.
 
 ## Known Gaps
 
@@ -181,7 +182,6 @@ reconstruction.
   declared in `htgeom.h`.
 * The public entry points ignore the return codes of the internal
   conversion passes and always return `HTREE_OK`.
-* Test 02 passes an uninitialized `HTreeRect*` to
-  `htree_build_bounding_rect` (tests/02-full-tree.cpp:65), which reads
-  `*result` before assigning it (htgeom.cpp:490, 507); in Debug builds
-  the test crashes with a segmentation fault.
+* `htree_build_bounding_rect` reads `*result` before assigning it
+  (htgeom.cpp:490, 507), so the caller must pass a NULL-initialized
+  pointer; the library does not guard against garbage input.

@@ -62,7 +62,7 @@ int main()
 	htree_edge_set_points(edge, 420, 170, 420, 150);
 	htree_add_edge(tree, edge);
 
-	HTreeRect* br;
+	HTreeRect* br = NULL;
 	htree_build_bounding_rect(doc, &br);
 	doc->bounding_rect = br;
 	

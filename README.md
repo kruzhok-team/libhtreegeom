@@ -31,3 +31,8 @@ Run `cmake ..` to build the library binaries and the test program.
 Run `make install` to install the library.
 
 Use CMake parameters to change the build type / installation prefix / etc.
+
+## Tests
+
+Run `ctest --output-on-failure` in the `build` directory, or
+`../run-tests.sh` to rebuild in Debug mode and run the suite.

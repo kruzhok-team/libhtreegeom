@@ -5,6 +5,8 @@ project(htgeom VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+enable_testing()
+
 if (WIN32)
   set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
@@ -55,6 +57,18 @@ foreach(source_path ${files})
       POST_BUILD
       COMMAND ln -sf "${PROJECT_BINARY_DIR}/${target_name}" "${PROJECT_BINARY_DIR}/tests/"
       )
+  endif()
+  string(REGEX MATCH "^[0-9]+" test_num "${target_name}")
+  set(expected_file "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_num}-output.txt")
+  if (EXISTS "${expected_file}")
+    add_test(NAME "${target_name}"
+      COMMAND "${CMAKE_COMMAND}"
+        -DTEST_PROG=$<TARGET_FILE:${target_name}>
+        -DTEST_OUTPUT=${PROJECT_BINARY_DIR}/tests/${target_name}.txt
+        -DTEST_EXPECTED=${expected_file}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunDiffTest.cmake)
+  else()
+    add_test(NAME "${target_name}" COMMAND "${target_name}")
   endif()
 endforeach()
 
