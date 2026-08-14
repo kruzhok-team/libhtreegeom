@@ -10,6 +10,12 @@ The code is distributed under the Lesser GNU Public License (version
 3), the documentation -- under the GNU Free Documentation License
 (version 1.3).
 
+## Documentation
+
+The documentation is located in the `docs` directory and contains:
+
+* The architecture - `architecture.md`
+
 ## Requirements
 
 * build-essential (c++ is required)
