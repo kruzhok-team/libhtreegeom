@@ -125,6 +125,7 @@ typedef struct _HTDocument {
 	#define                 HTREE_BAD_PARAMETER           1
 	#define                 HTREE_NOT_FOUND               2
 	#define                 HTREE_GEOMETRY_TRANFORM_ERROR 3
+	#define                 HTREE_GEOMETRY_INVALID        4
 
 	HTreePoint*             htree_new_point(void);
 	HTreePoint*             htree_new_point_coord(float x, float y);
@@ -184,6 +185,7 @@ typedef struct _HTDocument {
 	int                     htree_destroy_document(HTDocument* doc);
 	int                     htree_print_document(const HTDocument* doc);
 	int                     htree_build_bounding_rect(HTDocument* doc, HTreeRect** result);
+	int                     htree_check_geometry(const HTDocument* doc);
 	int                     htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm);
 	int                     htree_convert_document_geometry(HTDocument* doc,
 															HTCoordFormat new_node_coord_format,

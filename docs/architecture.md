@@ -52,7 +52,7 @@ declares the data types and four function groups:
   `htree_empty_rect`;
 * transforms - `htree_build_bounding_rect`,
   `htree_convert_document_geometry`,
-  `htree_reconstruct_document_geometry`.
+  `htree_reconstruct_document_geometry`, `htree_check_geometry`.
 
 The functions return `HTREE_OK`, `HTREE_BAD_PARAMETER`, `HTREE_NOT_FOUND`
 or `HTREE_GEOMETRY_TRANFORM_ERROR`.
@@ -141,7 +141,10 @@ points with the edge geometry of resolved edges: polylines (including
 their source/target endpoints) and label points and rects; straight-edge
 source/target points alone do not extend it. A tree whose single root is
 an `htTree` node with a rect (the explicit SM border on the diagram)
-contributes exactly that rect - the border wins over the content. `homog2d.hpp` is header-only, so the shared library links
+contributes exactly that rect - the border wins over the content. A
+well-formed diagram never places content outside its SM border;
+`htree_check_geometry` reports such documents as
+`HTREE_GEOMETRY_INVALID`, while the bounding rect stays tolerant. `homog2d.hpp` is header-only, so the shared library links
 nothing.
 
 ## The Consumer Contract
@@ -166,8 +169,8 @@ suite is run with `ctest --output-on-failure` (or `run-tests.sh`, which
 rebuilds in Debug mode first). Test 01 covers the empty document, test
 02 a full tree with edges, tests 03-09 the bounding rect cases (empty
 and degenerate documents, node unions, edge polylines, loop edges,
-labels, the explicit SM border). No test exercises format conversion or
-reconstruction.
+labels, the explicit SM border), test 10 the geometry validity check.
+No test exercises format conversion or reconstruction.
 
 ## Known Gaps
 

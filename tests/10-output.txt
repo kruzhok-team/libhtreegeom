@@ -1,0 +1,3 @@
+geometry check: 0
+geometry check: 4
+geometry check: 0
