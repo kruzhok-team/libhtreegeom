@@ -1,0 +1,2 @@
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [], bounding rect: ()}
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: state}], edges: []}], bounding rect: (x: 0, y: 0, w: 0, h: 0)}

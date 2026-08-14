@@ -188,7 +188,7 @@ static int htree_get_tree_collections(const HTree* tree,
 	
 	if (tree->edges) {
 		for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
-			if (!edge->source || edge->target) continue;
+			if (!edge->source || !edge->target) continue;
 			if (edge->polyline) {
 				HTreePoint source, target;
 
@@ -211,7 +211,7 @@ static int htree_get_tree_collections(const HTree* tree,
 					target = *center;
 					htree_destroy_point(center);
 				} else if (edge->target->point) {
-					source = *(edge->target->point);
+					target = *(edge->target->point);
 				} else {
 					continue;
 				}

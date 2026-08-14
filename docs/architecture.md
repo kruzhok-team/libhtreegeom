@@ -136,7 +136,10 @@ rebuilds composite parents' rects from their children's bounding box.
 and the reverse `homog_*_to_htree` functions. The engine is used for two
 things only: bounding boxes (`h2d::getBB` over collected points, rects
 and polylines) and edge border projection (`h2d::Segment::intersects`
-with a rect). `homog2d.hpp` is header-only, so the shared library links
+with a rect). The document bounding rect unites the node rects and
+points with the edge geometry of resolved edges: polylines (including
+their source/target endpoints) and label points and rects; straight-edge
+source/target points alone do not extend it. `homog2d.hpp` is header-only, so the shared library links
 nothing.
 
 ## The Consumer Contract
@@ -159,8 +162,9 @@ overloads of `htgeom_types.h`; `cmake/RunDiffTest.cmake` runs the
 binary and byte-compares its stdout with `tests/<NN>-output.txt`. The
 suite is run with `ctest --output-on-failure` (or `run-tests.sh`, which
 rebuilds in Debug mode first). Test 01 covers the empty document, test
-02 a full tree with edges and its bounding rect. No test exercises
-format conversion or reconstruction.
+02 a full tree with edges, tests 03-08 the bounding rect cases (empty
+and degenerate documents, node unions, edge polylines, loop edges,
+labels). No test exercises format conversion or reconstruction.
 
 ## Known Gaps
 
@@ -174,10 +178,9 @@ format conversion or reconstruction.
 * `htree_print_point` is declared for `const HTreePoint*` (htgeom.h:135)
   but defined for `const HTreeRect*` (htgeom_types.cpp:148); the declared
   C symbol is never defined and the body prints the pointer value.
-* The edge guard in `htree_get_tree_collections` reads
-  `if (!edge->source || edge->target) continue;` (htgeom.cpp:190), so
-  edge polylines and labels of well-formed edges never extend the
-  bounding rect.
+* `htree_polyline_to_homog` skips the vertex of a single-point polyline
+  (htgeom.cpp:107) — only the source and target points enter the
+  bounding-rect collection.
 * `htree_compare_rects` (htgeom_types.cpp:209) is implemented but not
   declared in `htgeom.h`.
 * The public entry points ignore the return codes of the internal
