@@ -139,7 +139,9 @@ and polylines) and edge border projection (`h2d::Segment::intersects`
 with a rect). The document bounding rect unites the node rects and
 points with the edge geometry of resolved edges: polylines (including
 their source/target endpoints) and label points and rects; straight-edge
-source/target points alone do not extend it. `homog2d.hpp` is header-only, so the shared library links
+source/target points alone do not extend it. A tree whose single root is
+an `htTree` node with a rect (the explicit SM border on the diagram)
+contributes exactly that rect - the border wins over the content. `homog2d.hpp` is header-only, so the shared library links
 nothing.
 
 ## The Consumer Contract
@@ -162,9 +164,10 @@ overloads of `htgeom_types.h`; `cmake/RunDiffTest.cmake` runs the
 binary and byte-compares its stdout with `tests/<NN>-output.txt`. The
 suite is run with `ctest --output-on-failure` (or `run-tests.sh`, which
 rebuilds in Debug mode first). Test 01 covers the empty document, test
-02 a full tree with edges, tests 03-08 the bounding rect cases (empty
+02 a full tree with edges, tests 03-09 the bounding rect cases (empty
 and degenerate documents, node unions, edge polylines, loop edges,
-labels). No test exercises format conversion or reconstruction.
+labels, the explicit SM border). No test exercises format conversion or
+reconstruction.
 
 ## Known Gaps
 

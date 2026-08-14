@@ -179,6 +179,13 @@ static int htree_get_tree_collections(const HTree* tree,
 		return HTREE_BAD_PARAMETER;
 	}
 
+	/* the explicit SM border: the tree bounding rect equals the border rect */
+	if (tree->nodes && !tree->nodes->next &&
+		tree->nodes->type == htTree && tree->nodes->rect) {
+		rects.push_back(htree_rect_to_homog(tree->nodes->rect));
+		return HTREE_OK;
+	}
+
 	if (tree->nodes) {
 		int res = htree_get_nodes_collections(tree->nodes, points, rects);
 		if (res != HTREE_OK) {

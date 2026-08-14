@@ -404,7 +404,9 @@ void htree_add_child_node(HTreeNode* node, HTreeNode* new_node)
 		prev->next = new_node;
 	} else {
 		node->children = new_node;
-		node->type = htCompositeNode;
+		if (node->type == htSimpleNode) {
+			node->type = htCompositeNode;
+		}
 	}
 	new_node->parent = node;
 }
