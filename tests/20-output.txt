@@ -1,0 +1,12 @@
+=== fill in the authored parent ===
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: parent, rect: (x: 100, y: 100, w: 400, h: 300), children: [HTreeNode {id: c-1, rect: (x: 150, y: 150, w: 100, h: 80)}, HTreeNode {id: init}, HTreeNode {id: s-2}]}], edges: []}], bounding rect: ()}
+reconstruct: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: parent, rect: (x: 100, y: 100, w: 400, h: 300), children: [HTreeNode {id: c-1, rect: (x: 150, y: 150, w: 100, h: 80)}, HTreeNode {id: init, point: (x: 110, y: 110)}, HTreeNode {id: s-2, rect: (x: 130, y: 110, w: 300, h: 200)}]}], edges: []}], bounding rect: (x: 100, y: 100, w: 400, h: 300)}
+=== grow the parent and the border ===
+reconstruct: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: -10, y: -10, w: 340, h: 450), children: [HTreeNode {id: small, rect: (x: 0, y: 0, w: 320, h: 430), children: [HTreeNode {id: n-1, rect: (x: 10, y: 10, w: 300, h: 200)}, HTreeNode {id: n-2, rect: (x: 10, y: 220, w: 300, h: 200)}]}]}], edges: []}], bounding rect: (x: -10, y: -10, w: 340, h: 450)}
+geometry check: 0
+=== authored no-op ===
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 10, y: 10, w: 100, h: 60)}, HTreeNode {id: b, rect: (x: 200, y: 10, w: 100, h: 60)}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 110, y: 40), target point: (x: 200, y: 40)}]}], bounding rect: (x: 10, y: 10, w: 290, h: 60)}
+reconstruct: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 10, y: 10, w: 100, h: 60)}, HTreeNode {id: b, rect: (x: 200, y: 10, w: 100, h: 60)}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 110, y: 40), target point: (x: 200, y: 40)}]}], bounding rect: (x: 10, y: 10, w: 290, h: 60)}

@@ -128,9 +128,16 @@ node. A special case ("the yEd hack") binds edge labels to the edge
 source point instead of the source node for the
 absolute/local-center/absolute/`edgeCenter` format combination.
 
-Reconstruction gives every geometry-less node a default rect
-(`NODE_WIDTH` x `NODE_HEIGHT` at parent offset `PADDING`) or point, and
-rebuilds composite parents' rects from their children's bounding box.
+Reconstruction is a preserving fill-in: the existing geometry is never
+modified. Missing children are shelf-placed inside their parent (rows
+with `PADDING` gaps, default `NODE_WIDTH` x `NODE_HEIGHT` states); a
+missing parent rect is created from the children plus `PADDING`, an
+authored one only grows (grow-only, cascading bottom-up and into the
+explicit SM border, which also covers the reconstructed edge geometry).
+Edges with no geometry of their own get the straight center-to-center
+attachment projected onto the borders; a loop gets a small side loop
+with a polyline; partially specified edges are preserved. A cleaned
+(format-less) document reconstructs into the canonical absolute form.
 
 ## The homog2d Integration
 
@@ -178,11 +185,10 @@ test 11 the transform error codes, tests 12-16 the conversion matrix
 (round trips of the three main formats, the pairwise chain, the two
 local-center parents, the center-to-border projection, the off-preset
 combinations), test 17 six levels of nested states, test 18 the
-border-to-center projection.
+border-to-center projection, tests 19-20 the reconstruction (the edge
+fill-in and the preserving shelf placement with the grow-only parents).
 
 ## Known Gaps
 
-* `htree_reconstruct_edges_geometry` (htgeom.cpp:1389) is an empty stub -
-  reconstruction never creates edge points, polylines or labels.
 * `htree_compare_rects` (htgeom_types.cpp:209) is implemented but not
   declared in `htgeom.h`.
