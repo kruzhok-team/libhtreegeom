@@ -187,7 +187,3 @@ local-center parents, the center-to-border projection, the off-preset
 combinations), test 17 six levels of nested states, test 18 the
 border-to-center projection, tests 19-20 the reconstruction (the edge
 fill-in and the preserving shelf placement with the grow-only parents).
-
-## Known Gaps
-
-No known gaps currently - see the git history for the closed ones.
