@@ -90,5 +90,15 @@ int main()
 	htree_print_point(pt);
 	printf("\n");
 	htree_destroy_point(pt);
+
+	/* the rect comparison */
+	HTreeRect* r1 = htree_new_rect_coord(1, 2, 3, 4);
+	HTreeRect* r2 = htree_new_rect_coord(1, 2, 3, 4);
+	printf("compare equal: %d\n", htree_compare_rects(r1, r2));
+	r2->width = 5;
+	printf("compare different: %d\n", htree_compare_rects(r1, r2));
+	printf("compare with NULL: %d\n", htree_compare_rects(r1, NULL));
+	htree_destroy_rect(r1);
+	htree_destroy_rect(r2);
 	return 0;
 }

@@ -190,5 +190,4 @@ fill-in and the preserving shelf placement with the grow-only parents).
 
 ## Known Gaps
 
-* `htree_compare_rects` (htgeom_types.cpp:209) is implemented but not
-  declared in `htgeom.h`.
+No known gaps currently - see the git history for the closed ones.

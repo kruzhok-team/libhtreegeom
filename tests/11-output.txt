@@ -5,3 +5,6 @@ reconstruct without edges: 0
 bounding rect into NULL: 1
 degenerate bounding rect: 0 (x: 10, y: 50, w: 80, h: 0)
 (x: 1, y: 2)
+compare equal: 0
+compare different: 1
+compare with NULL: -1

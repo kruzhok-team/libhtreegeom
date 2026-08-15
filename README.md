@@ -15,6 +15,7 @@ The code is distributed under the Lesser GNU Public License (version
 The documentation is located in the `docs` directory and contains:
 
 * The architecture - `architecture.md`
+* The interface specification - `api.md`
 
 ## Requirements
 

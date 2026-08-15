@@ -42,7 +42,7 @@
  * Geometry conversions: lib to homog2d and back
  * ----------------------------------------------------------------------------- */
 
-h2d::Point2dD htree_point_to_homog(const HTreePoint* point)
+static h2d::Point2dD htree_point_to_homog(const HTreePoint* point)
 {
 	if (point) {
 		return h2d::Point2dD(point->x, point->y);
@@ -50,17 +50,7 @@ h2d::Point2dD htree_point_to_homog(const HTreePoint* point)
 	return h2d::Point2dD();
 }
 
-HTreePoint* homog_point_to_htree(const h2d::Point2dD& hgpoint)
-{
-	HTreePoint* point = htree_new_point();
-	point->x = hgpoint.getX();
-//	if (point->x != 0.0 && abs(point->x) < 0.000001) point->x = 0.0;
-	point->y = hgpoint.getY();
-//	if (point->y != 0.0 && abs(point->y) < 0.000001) point->y = 0.0;
-	return point;
-}
-
-int homog_point_to_htree(const h2d::Point2dD& hgpoint, HTreePoint& point)
+static int homog_point_to_htree(const h2d::Point2dD& hgpoint, HTreePoint& point)
 {
 	point.x = hgpoint.getX();
 //	if (point.x != 0.0 && abs(point.x) < 0.000001) point.x = 0.0;
@@ -69,81 +59,13 @@ int homog_point_to_htree(const h2d::Point2dD& hgpoint, HTreePoint& point)
 	return HTREE_OK;
 }
 
-h2d::FRectD htree_rect_to_homog(const HTreeRect* rect)
+static h2d::FRectD htree_rect_to_homog(const HTreeRect* rect)
 {
 	if (rect) {
 		return h2d::FRectD(rect->x, rect->y,
 						   rect->x + rect->width, rect->y + rect->height);
 	}
 	return h2d::FRectD();
-}
-
-HTreeRect* homog_rect_to_htree(const h2d::FRectD& hgrect)
-{
-	HTreeRect* rect = htree_new_rect();
-	h2d::Point2dD p = hgrect.getPts().first;
-	rect->x = p.getX();
-	rect->y = p.getY();
-	rect->width = hgrect.width();
-	rect->height = hgrect.height();
-	return rect;
-}
-
-int homog_rect_to_htree(const h2d::FRectD& hgrect, HTreeRect& rect)
-{
-	h2d::Point2dD p = hgrect.getPts().first;
-	rect.x = p.getX();
-	rect.y = p.getY();
-	rect.width = hgrect.width();
-	rect.height = hgrect.height();
-	return HTREE_OK;
-}
-
-h2d::OPolylineD htree_polyline_to_homog(const HTreePoint* source, const HTreePoint* target,
-										const HTreePolyline* polyline)
-{
-	std::vector<h2d::Point2dD> points;
-	points.push_back(htree_point_to_homog(source));
-	if (polyline->next) {
-		/* more than one point */
-		while (polyline) {
-			points.push_back(htree_point_to_homog(&(polyline->point)));
-			polyline = polyline->next;
-		}
-	}
-	points.push_back(htree_point_to_homog(target));
-	return h2d::OPolyline(points);
-}
-
-HTreePolyline* homog_polyline_to_htree(const h2d::OPolylineD& hgpolyline)
-{
-	HTreePolyline* polyline = NULL;
-	
-	if (hgpolyline.size() > 0) {
-		std::vector<h2d::Point2dD> points = hgpolyline.getPts();
-		
-		HTreePolyline* prev = NULL;
-
-		for (std::vector<h2d::Point2dD>::const_iterator i = points.begin(); i != points.end(); i++) {
-			if (i == points.begin() || std::next(i) == points.end()) {
-				// skip the first and last point
-				continue;
-			}
-			
-			HTreePolyline* pl = htree_new_polyline();
-			pl->point.x = i->getX();
-			pl->point.y = i->getY();			
-			if (!polyline) {
-				polyline = pl;
-				prev = pl;
-			} else {
-				prev->next = pl;
-				prev = pl;
-			}
-		}
-	}
-
-	return polyline;
 }
 
 static int htree_get_nodes_collections(const HTreeNode* nodes,

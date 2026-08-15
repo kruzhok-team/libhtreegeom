@@ -124,6 +124,8 @@ typedef struct _HTDocument {
 	#define                 HTREE_OK                      0
 	#define                 HTREE_BAD_PARAMETER           1
 	#define                 HTREE_NOT_FOUND               2
+	#define                 HTREE_GEOMETRY_TRANSFORM_ERROR 3
+	/* deprecated: the misspelled alias of HTREE_GEOMETRY_TRANSFORM_ERROR */
 	#define                 HTREE_GEOMETRY_TRANFORM_ERROR 3
 	#define                 HTREE_GEOMETRY_INVALID        4
 
@@ -144,6 +146,7 @@ typedef struct _HTDocument {
 	int                     htree_round_rect(HTreeRect* r, unsigned int signs);
 	int                     htree_destroy_rect(HTreeRect* r);
 	int                     htree_empty_rect(const HTreeRect* r);
+	int                     htree_compare_rects(const HTreeRect* a, const HTreeRect* b);
 	int                     htree_print_rect(const HTreeRect* r);
 	
 	HTreePolyline*          htree_new_polyline(void);

@@ -30,7 +30,7 @@
 #define MAX_STR_LEN	4096
 #define OSTREAM     std::cout
 
-int htree_copy_string(char** target, size_t* size, const char* source)
+static int htree_copy_string(char** target, size_t* size, const char* source)
 {
 	char* target_str;
 	size_t strsize;
@@ -206,7 +206,7 @@ int htree_empty_rect(const HTreeRect* r)
 	return r->x == 0.0 && r->y == 0.0 && r->width == 0.0 && r->height == 0.0;
 }
 
-int htree_compare_rects(HTreeRect* a, HTreeRect* b)
+int htree_compare_rects(const HTreeRect* a, const HTreeRect* b)
 {
 	if (!a || !b) return -1;
 	return a->x != b->x || a->y != b->y || a->width != b->width || a->height != b->height;	
