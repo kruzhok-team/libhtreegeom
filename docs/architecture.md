@@ -174,7 +174,7 @@ labels, the explicit SM border), test 10 the geometry validity check,
 test 11 the transform error codes, tests 12-16 the conversion matrix
 (round trips of the three main formats, the pairwise chain, the two
 local-center parents, the center-to-border projection, the off-preset
-combinations). Converting to true `edgeCenter` points stays untested
+combinations), test 17 six levels of nested states. Converting to true `edgeCenter` points stays untested
 until the border-to-center conversion is implemented.
 
 ## Known Gaps
