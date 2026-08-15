@@ -119,8 +119,11 @@ The to-absolute pass converts nodes top-down (a parent's converted rect
 becomes the children's reference), then edge source/target points, then
 projects `edgeCenter` endpoints onto the node borders (segment x rect
 intersection via homog2d), then edge labels. The to-format pass mirrors
-it: labels, then edge points, then nodes children-first, then the
-bounding rect itself. Polyline points are always relative to the source
+it: labels, then the center projection for `edgeCenter` targets (each
+source/target point becomes the perpendicular foot of its state center
+on the edge's outgoing line - (0,0) in the center-relative frame when
+the edge aims at the center), then edge points, then nodes
+children-first, then the bounding rect itself. Polyline points are always relative to the source
 node. A special case ("the yEd hack") binds edge labels to the edge
 source point instead of the source node for the
 absolute/local-center/absolute/`edgeCenter` format combination.
@@ -174,17 +177,12 @@ labels, the explicit SM border), test 10 the geometry validity check,
 test 11 the transform error codes, tests 12-16 the conversion matrix
 (round trips of the three main formats, the pairwise chain, the two
 local-center parents, the center-to-border projection, the off-preset
-combinations), test 17 six levels of nested states. Converting to true `edgeCenter` points stays untested
-until the border-to-center conversion is implemented.
+combinations), test 17 six levels of nested states, test 18 the
+border-to-center projection.
 
 ## Known Gaps
 
 * `htree_reconstruct_edges_geometry` (htgeom.cpp:1389) is an empty stub -
   reconstruction never creates edge points, polylines or labels.
-* The border-to-center edge conversion is disabled:
-  `htree_convert_edges_geometry_to_format_center` is a commented-out,
-  non-compiling draft (htgeom.cpp:1111-1209) and its call site is
-  commented out too (htgeom.cpp:1286-1293), so converting to `edgeCenter`
-  updates the `edge_format` field while the points stay on the borders.
 * `htree_compare_rects` (htgeom_types.cpp:209) is implemented but not
   declared in `htgeom.h`.

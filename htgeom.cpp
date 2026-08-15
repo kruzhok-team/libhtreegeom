@@ -867,12 +867,14 @@ static int htree_convert_edges_geometry_to_absolute_borders(HTDocument* doc)
 				h2d::Point2dD from_point = htree_point_to_homog(edge->source_point);
 				h2d::Point2dD to_point = htree_point_to_homog(edge->target_point);
 
-				//DEBUG << "convert edge from " << from_point << " to " << to_point << std::endl;
-				
-				h2d::SegmentD from_segment, to_segment;
+				/* a segment cannot carry two identical points:
+				   the degenerate ends keep their positions */
+				bool project_source, project_target;
+				h2d::Point2dD from_toward, to_toward;
 				if (!edge->polyline) {
-					from_segment = to_segment = h2d::SegmentD(from_point, to_point);
-					//DEBUG << "converted from " << edge->source_point << " -> " << edge->target_point << std::endl;
+					from_toward = to_point;
+					to_toward = from_point;
+					project_source = project_target = (from_point != to_point);
 				} else {
 					h2d::Point2dD first_point = htree_point_to_homog(&(edge->polyline->point));
 					HTreePolyline* pl = edge->polyline;
@@ -880,23 +882,23 @@ static int htree_convert_edges_geometry_to_absolute_borders(HTDocument* doc)
 						pl = pl->next;
 					}
 					h2d::Point2dD last_point = htree_point_to_homog(&(pl->point));
-					from_segment = h2d::SegmentD(from_point, first_point);
-					to_segment = h2d::SegmentD(last_point, to_point);
-					//DEBUG << "converted from " << from_point << " -> " << first_point << std::endl;
-					//DEBUG << "converted from " << last_point << " -> " << to_point << std::endl;
+					from_toward = first_point;
+					to_toward = last_point;
+					project_source = (from_point != first_point);
+					project_target = (last_point != to_point);
 				}
 
-				if (edge->source->rect) {
+				if (project_source && edge->source->rect) {
 					h2d::FRectD from_rect = htree_rect_to_homog(edge->source->rect);
-					auto res = from_segment.intersects(from_rect);
+					auto res = h2d::SegmentD(from_point, from_toward).intersects(from_rect);
 					if (res() && res.get().size() >= 1) {
 						homog_point_to_htree(res.get().front(), *edge->source_point);
 					}
 				}
 
-				if (edge->target->rect) {
+				if (project_target && edge->target->rect) {
 					h2d::FRectD to_rect = htree_rect_to_homog(edge->target->rect);
-					auto res = to_segment.intersects(to_rect);
+					auto res = h2d::SegmentD(to_toward, to_point).intersects(to_rect);
 					if (res() && res.get().size() >= 1) {
 						homog_point_to_htree(res.get().front(), *edge->target_point);
 					}
@@ -985,8 +987,13 @@ static int htree_convert_edges_geometry_to_absolute(HTDocument* doc)
 			return res;
 		}
 	}
-	
-	//DEBUG << "convert edge geometry " << doc->edge_format << std::endl;
+
+	/* the labels are bound to the stored source points,
+	   so they convert before the border projection */
+	res = htree_convert_edges_geometry_to_absolute_labels(doc);
+	if (res != HTREE_OK) {
+		return res;
+	}
 
 	if (doc->edge_format != edgeBorder) {
 		res = htree_convert_edges_geometry_to_absolute_borders(doc);
@@ -995,7 +1002,7 @@ static int htree_convert_edges_geometry_to_absolute(HTDocument* doc)
 		}
 	}
 
-	return htree_convert_edges_geometry_to_absolute_labels(doc);
+	return HTREE_OK;
 }
 
 static int htree_convert_document_geometry_to_absolute(HTDocument* doc)
@@ -1285,105 +1292,75 @@ static int htree_convert_edges_geometry_to_format_points(HTDocument* doc,
 	return HTREE_OK;
 }
 
-/*static int htree_convert_edges_geometry_to_format_center(HTDocument* doc)
+/* The center attachment of an edge end: the perpendicular foot of the
+   state center on the edge's outgoing line; the foot equals the center
+   (and later reframes to (0,0)) when the edge aims at the center */
+static void htree_project_center_point(HTreePoint* point, const HTreePoint* toward,
+									   double center_x, double center_y)
 {
-	int res;
-	
+	const double EPS = 1e-9;
+	double dx = toward->x - point->x;
+	double dy = toward->y - point->y;
+	double len2 = dx * dx + dy * dy;
+	if (len2 < EPS) {
+		/* coinciding ends: keep the border point */
+		return;
+	}
+	double t = ((center_x - point->x) * dx + (center_y - point->y) * dy) / len2;
+	point->x += t * dx;
+	point->y += t * dy;
+}
+
+static int htree_convert_edges_geometry_to_center(HTDocument* doc)
+{
 	if (!doc) {
 		return HTREE_BAD_PARAMETER;
 	}
 
-	// now we'll find the centers
-
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
 		for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
-			if (edge->source_point && edge->source && (edge->source->rect || edge->source->point) &&
-				edge->source_point && edge->target && (edge->target->rect || edge->target->point)) {
-
-				h2d::Point2dD source_center;
-				h2d::Point2dD target_center;
-
-				if (edge->source->point) {
-					source_center = htree_point_to_homog(edge->source->point);
-				} else {
-					h2d::FRectD rect = htree_rect_to_homog(edge->source->rect);
-					source_center = rect.getCenter();
-				}
-				if (edge->target->point) {
-					target_center = htree_point_to_homog(edge->target->point);
-				} else {
-					h2d::FRectD rect = htree_rect_to_homog(edge->target->rect);
-					target_center = rect.getCenter();
-				}
-				
-				if (!edge->polyline) {
-					h2d::Line2dD line(htree_point_to_homog(edge->source_point),
-									  htree_point_to_homog(edge->target_point));
-					if (side(source_center, line) == 0) {
-						// source center is on line
-						edge->source_point->x = 0.0;
-						edge->source_point->y = 0.0;
-					} else {
-						h2d::SegmentD segment = line.getOrthogSegment(source_point);
-						auto pair = segment.getPts();
-						if (pair.first == source_point) {
-							source_point = pair.second;
-						} else {
-							source_point = pair.first;
-						}
-						homog_point_to_htree(source_point, *edge->source_point);
-						if (edge->source->rect) {
-							htree_convert_point_geometry_to_format(edge->source_point,
-																   edge->source->rect,
-																   coordLocalCenter);
-						} else {
-							htree_convert_point_geometry_to_format(edge->source_point,
-																   edge->source->point,
-																   coordLocalCenter);
-																   }
-
-						segment = line.getOrthogSegment(target_point);
-						pair = segment.getPts();
-						if (pair.first == target_point) {
-							target_point = pair.second;
-						} else {
-							target_point = pair.first;
-						}
-						homog_point_to_htree(target_point, *edge->target_point);
-						if (edge->target->rect) {
-							htree_convert_point_geometry_to_format(edge->target_point,
-																   edge->target->rect,
-																   coordLocalCenter);
-						} else {
-							htree_convert_point_geometry_to_format(edge->target_point,
-																   edge->target->point,
-																   coordLocalCenter);
-																   }
-					}
-				} else {
-					h2d::Point2dD first_point = htree_point_to_homog(&(edge->polyline->point));
+			if (!(edge->source && (edge->source->rect || edge->source->point) &&
+				  edge->target && (edge->target->rect || edge->target->point))) {
+				continue;
+			}
+			double scx, scy, tcx, tcy;
+			if (edge->source->rect) {
+				scx = edge->source->rect->x + edge->source->rect->width / 2.0;
+				scy = edge->source->rect->y + edge->source->rect->height / 2.0;
+			} else {
+				scx = edge->source->point->x;
+				scy = edge->source->point->y;
+			}
+			if (edge->target->rect) {
+				tcx = edge->target->rect->x + edge->target->rect->width / 2.0;
+				tcy = edge->target->rect->y + edge->target->rect->height / 2.0;
+			} else {
+				tcx = edge->target->point->x;
+				tcy = edge->target->point->y;
+			}
+			if (edge->source_point && edge->target_point) {
+				HTreePoint* toward_source;
+				HTreePoint* toward_target;
+				if (edge->polyline) {
 					HTreePolyline* pl = edge->polyline;
-					while (pl->next) {
-						pl = pl->next;
-					}
-					h2d::Point2dD last_point = htree_point_to_homog(&(pl->point));
-
-					h2d::Line2dD line1(source_point, first_point);
-					h2d::Line2dD line2(target_point, last_point);
-
-					if (!line1.isParallel(line2)) {
-						if (edge->source == edge->target) {
-							h2d::Point2dD crossing = line1 * line2;
-							h2d::FRectD the_rect = htree_rect_to_homog(); 
-						}
-					}
+					while (pl->next) pl = pl->next;
+					toward_source = &(edge->polyline->point);
+					toward_target = &(pl->point);
+				} else {
+					toward_source = edge->target_point;
+					toward_target = edge->source_point;
 				}
+				HTreePoint old_source = *(edge->source_point);
+				htree_project_center_point(edge->source_point, toward_source, scx, scy);
+				htree_project_center_point(edge->target_point,
+										   edge->polyline ? toward_target : &old_source,
+										   tcx, tcy);
 			}
 		}
-	}	
-	
+	}
+
 	return HTREE_OK;
-	}*/
+}
 
 static int htree_convert_edges_geometry_to_format_labels(HTDocument* doc,
 														 HTCoordFormat new_format,
@@ -1460,6 +1437,14 @@ static int htree_convert_edges_geometry_to_format(HTDocument* doc,
 		return HTREE_OK;
 	}
 
+	if (new_edge_format == edgeCenter) {
+		res = htree_convert_edges_geometry_to_center(doc);
+		if (res != HTREE_OK) {
+			return res;
+		}
+	}
+
+	/* the labels are bound to the projected source points */
 	res = htree_convert_edges_geometry_to_format_labels(doc,
 														new_format,
 														new_pl_format,
@@ -1467,15 +1452,6 @@ static int htree_convert_edges_geometry_to_format(HTDocument* doc,
 	if (res != HTREE_OK) {
 		return res;
 	}
-	
-/*	DEBUG << "convert edge geometry " << doc->edge_format << " to " << new_edge_format << std::endl;
-
-	if (new_edge_format != edgeBorder) {
-		res = htree_convert_edges_geometry_to_format_center(doc);
-		if (res != HTREE_OK) {
-			return res;
-		}
-		}*/
 
 	return htree_convert_edges_geometry_to_format_points(doc, new_format, new_pl_format);
 }
