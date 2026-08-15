@@ -171,7 +171,11 @@ rebuilds in Debug mode first). Test 01 covers the empty document, test
 02 a full tree with edges, tests 03-09 the bounding rect cases (empty
 and degenerate documents, node unions, edge polylines, loop edges,
 labels, the explicit SM border), test 10 the geometry validity check,
-test 11 the transform error codes and the yEd format conversion.
+test 11 the transform error codes, tests 12-16 the conversion matrix
+(round trips of the three main formats, the pairwise chain, the two
+local-center parents, the center-to-border projection, the off-preset
+combinations). Converting to true `edgeCenter` points stays untested
+until the border-to-center conversion is implemented.
 
 ## Known Gaps
 

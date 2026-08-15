@@ -1,0 +1,12 @@
+=== implicit bounding rect parent ===
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 0, y: 0, w: 100, h: 100)}, HTreeNode {id: b, rect: (x: 200, y: 0, w: 100, h: 100)}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 100, y: 50), target point: (x: 200, y: 50)}]}], bounding rect: (x: 0, y: 0, w: 300, h: 100)}
+to qt: 0
+HTreeDocument {nodes coord: 4, edge coord: 4, edge polylines coord: 4, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: -100, y: 0, w: 100, h: 100)}, HTreeNode {id: b, rect: (x: 100, y: 0, w: 100, h: 100)}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 50, y: 0), target point: (x: -50, y: 0)}]}], bounding rect: (x: 150, y: 50, w: 300, h: 100)}
+back to absolute: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 0, y: 0, w: 100, h: 100)}, HTreeNode {id: b, rect: (x: 200, y: 0, w: 100, h: 100)}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 100, y: 50), target point: (x: 200, y: 50)}]}], bounding rect: (x: 0, y: 0, w: 300, h: 100)}
+=== explicit toplevel parent ===
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: parent, rect: (x: 10, y: 10, w: 400, h: 200), children: [HTreeNode {id: inner, rect: (x: 50, y: 50, w: 100, h: 60)}]}], edges: []}], bounding rect: (x: 10, y: 10, w: 400, h: 200)}
+to qt: 0
+HTreeDocument {nodes coord: 4, edge coord: 4, edge polylines coord: 4, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: parent, rect: (x: 210, y: 110, w: 400, h: 200), children: [HTreeNode {id: inner, rect: (x: -110, y: -30, w: 100, h: 60)}]}], edges: []}], bounding rect: (x: 210, y: 110, w: 400, h: 200)}
+back to absolute: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: parent, rect: (x: 10, y: 10, w: 400, h: 200), children: [HTreeNode {id: inner, rect: (x: 50, y: 50, w: 100, h: 60)}]}], edges: []}], bounding rect: (x: 10, y: 10, w: 400, h: 200)}
