@@ -205,7 +205,13 @@ static int htree_get_edges_collections(const HTreeEdge* edges,
 					continue;
 				}
 				
-				polylines.push_back(htree_polyline_to_homog(&source, &target, edge->polyline));
+				/* push the plain points: an open polyline cannot carry
+				   coinciding loop ends and single-vertex chains */
+				points.push_back(htree_point_to_homog(&source));
+				for (const HTreePolyline* pl = edge->polyline; pl; pl = pl->next) {
+					points.push_back(htree_point_to_homog(&(pl->point)));
+				}
+				points.push_back(htree_point_to_homog(&target));
 			}
 			if (edge->label_point) {
 				points.push_back(htree_point_to_homog(edge->label_point));

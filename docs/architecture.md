@@ -136,7 +136,8 @@ rebuilds composite parents' rects from their children's bounding box.
 and the reverse `homog_*_to_htree` functions. The engine is used for the
 collected geometry containers and the edge border projection
 (`h2d::Segment::intersects` with a rect); the bounding boxes are folded
-manually (min/max), since `h2d::getBB` rejects degenerate collections. The document bounding rect unites the node rects and
+manually (min/max) over plain points and rects, since homog2d rejects
+degenerate point sets and polylines. The document bounding rect unites the node rects and
 points with the edge geometry of resolved edges: polylines (including
 their source/target endpoints) and label points and rects; straight-edge
 source/target points alone do not extend it. A tree whose single root is
@@ -181,8 +182,5 @@ test 11 the transform error codes and the yEd format conversion.
   non-compiling draft (htgeom.cpp:1111-1209) and its call site is
   commented out too (htgeom.cpp:1286-1293), so converting to `edgeCenter`
   updates the `edge_format` field while the points stay on the borders.
-* `htree_polyline_to_homog` skips the vertex of a single-point polyline
-  (htgeom.cpp:107) — only the source and target points enter the
-  bounding-rect collection.
 * `htree_compare_rects` (htgeom_types.cpp:209) is implemented but not
   declared in `htgeom.h`.
