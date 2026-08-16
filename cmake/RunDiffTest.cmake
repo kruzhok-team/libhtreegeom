@@ -1,6 +1,6 @@
 # Runs a test program and compares its output with the expected file.
 # Arguments: -DTEST_PROG=<binary> -DTEST_OUTPUT=<stdout capture>
-#            [-DTEST_EXPECTED=<golden file>]
+#            [-DTEST_EXPECTED=<good file>]
 
 execute_process(COMMAND ${TEST_PROG} OUTPUT_FILE ${TEST_OUTPUT}
                 RESULT_VARIABLE run_result)
