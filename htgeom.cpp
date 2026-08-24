@@ -20,6 +20,7 @@
  *
  * ----------------------------------------------------------------------------- */
 
+#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -997,8 +998,8 @@ static int htree_convert_point_geometry_to_format(HTreePoint* point,
 	point->x -= parent->x;
 	point->y -= parent->y;
 
-	if (point->x != 0.0 && abs(point->x) < 0.000001) point->x = 0.0;
-	if (point->y != 0.0 && abs(point->y) < 0.000001) point->y = 0.0;
+	if (point->x != 0.0 && std::fabs(point->x) < 0.000001) point->x = 0.0;
+	if (point->y != 0.0 && std::fabs(point->y) < 0.000001) point->y = 0.0;
 	
 	return HTREE_OK;
 }
@@ -1029,8 +1030,8 @@ static int htree_convert_point_geometry_to_format(HTreePoint* point,
 		point->y -= parent->y + parent->height / 2.0;
 	}
 
-	if (point->x != 0.0 && abs(point->x) < 0.000001) point->x = 0.0;
-	if (point->y != 0.0 && abs(point->y) < 0.000001) point->y = 0.0;
+	if (point->x != 0.0 && std::fabs(point->x) < 0.000001) point->x = 0.0;
+	if (point->y != 0.0 && std::fabs(point->y) < 0.000001) point->y = 0.0;
 	
 	return HTREE_OK;
 }
