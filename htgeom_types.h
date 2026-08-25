@@ -26,6 +26,27 @@
 #include <iostream>
 #include "htgeom.h"
 
+/* -----------------------------------------------------------------------------
+ * the geometry constants
+ * ----------------------------------------------------------------------------- */
+
+/* the coordinates below the epsilon snap to zero on the format conversion */
+#define HTREE_COORD_EPS        1e-6
+/* the rect comparison tolerance */
+#define HTREE_RECT_EPS         1e-6
+/* the squared length of a degenerate (zero-length) segment */
+#define HTREE_LENGTH_EPS       1e-9
+/* the decimal rounding */
+#define HTREE_ROUND_HALF       0.5
+#define HTREE_ROUND_BASE       10.0
+
+/* the reconstructed geometry defaults */
+#define PADDING                10
+#define NODE_WIDTH             300
+#define NODE_HEIGHT            200
+/* the shelf width (in the node columns) for a parent without a rect */
+#define HTREE_SHELF_COLUMNS    3
+
 inline std::ostream& operator<<(std::ostream& os, const HTreePoint* point)
 {
 	if (point) {

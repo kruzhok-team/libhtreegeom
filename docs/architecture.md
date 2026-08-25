@@ -39,7 +39,9 @@ header-only homog2d library.
 ## The Public Interface
 
 `htgeom.h` is the single public header, wrapped in `extern "C"`. It
-declares the data types and four function groups:
+declares the data types and four function groups (the private
+`htgeom_types.h` adds the printing operators and the tunable geometry
+constants - the layout defaults and the comparison tolerances):
 
 * lifecycle - `htree_new_*` / `htree_copy_*` / `htree_set_*` /
   `htree_destroy_*` for points, rects, polylines, nodes, edges, trees and
@@ -130,7 +132,8 @@ absolute/local-center/absolute/`edgeCenter` format combination.
 
 Reconstruction is a preserving fill-in: the existing geometry is never
 modified. Missing children are shelf-placed inside their parent (rows
-with `PADDING` gaps, default `NODE_WIDTH` x `NODE_HEIGHT` states); a
+with `PADDING` gaps, `HTREE_SHELF_COLUMNS` columns wide when the parent
+has no rect yet, default `NODE_WIDTH` x `NODE_HEIGHT` states); a
 missing parent rect is created from the children plus `PADDING`, an
 authored one only grows (grow-only, cascading bottom-up and into the
 explicit SM border, which also covers the reconstructed edge geometry).

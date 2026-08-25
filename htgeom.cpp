@@ -35,10 +35,6 @@
 #define DEBUG
 #endif
 
-#define PADDING             10
-#define NODE_WIDTH          300
-#define NODE_HEIGHT         200
-
 /* -----------------------------------------------------------------------------
  * Geometry conversions: lib to homog2d and back
  * ----------------------------------------------------------------------------- */
@@ -54,9 +50,9 @@ static h2d::Point2dD htree_point_to_homog(const HTreePoint* point)
 static int homog_point_to_htree(const h2d::Point2dD& hgpoint, HTreePoint& point)
 {
 	point.x = hgpoint.getX();
-//	if (point.x != 0.0 && abs(point.x) < 0.000001) point.x = 0.0;
+//	if (point.x != 0.0 && abs(point.x) < HTREE_COORD_EPS) point.x = 0.0;
 	point.y = hgpoint.getY();
-//	if (point.y != 0.0 && abs(point.y) < 0.000001) point.y = 0.0;
+//	if (point.y != 0.0 && abs(point.y) < HTREE_COORD_EPS) point.y = 0.0;
 	return HTREE_OK;
 }
 
@@ -535,7 +531,6 @@ int htree_build_bounding_rect(HTDocument* doc, HTreeRect** result)
 
 int htree_check_geometry(const HTDocument* doc)
 {
-	const double EPS = 1e-6;
 	int res = HTREE_OK;
 
 	if (!doc) {
@@ -581,10 +576,10 @@ int htree_check_geometry(const HTDocument* doc)
 		if (content) {
 			if (!htree_empty_rect(content)) {
 				const HTreeRect* b = tree->nodes->rect;
-				if (content->x < b->x - EPS ||
-					content->y < b->y - EPS ||
-					content->x + content->width > b->x + b->width + EPS ||
-					content->y + content->height > b->y + b->height + EPS) {
+				if (content->x < b->x - HTREE_RECT_EPS ||
+					content->y < b->y - HTREE_RECT_EPS ||
+					content->x + content->width > b->x + b->width + HTREE_RECT_EPS ||
+					content->y + content->height > b->y + b->height + HTREE_RECT_EPS) {
 					res = HTREE_GEOMETRY_INVALID;
 				}
 			}
@@ -998,8 +993,8 @@ static int htree_convert_point_geometry_to_format(HTreePoint* point,
 	point->x -= parent->x;
 	point->y -= parent->y;
 
-	if (point->x != 0.0 && std::fabs(point->x) < 0.000001) point->x = 0.0;
-	if (point->y != 0.0 && std::fabs(point->y) < 0.000001) point->y = 0.0;
+	if (point->x != 0.0 && std::fabs(point->x) < HTREE_COORD_EPS) point->x = 0.0;
+	if (point->y != 0.0 && std::fabs(point->y) < HTREE_COORD_EPS) point->y = 0.0;
 	
 	return HTREE_OK;
 }
@@ -1030,8 +1025,8 @@ static int htree_convert_point_geometry_to_format(HTreePoint* point,
 		point->y -= parent->y + parent->height / 2.0;
 	}
 
-	if (point->x != 0.0 && std::fabs(point->x) < 0.000001) point->x = 0.0;
-	if (point->y != 0.0 && std::fabs(point->y) < 0.000001) point->y = 0.0;
+	if (point->x != 0.0 && std::fabs(point->x) < HTREE_COORD_EPS) point->x = 0.0;
+	if (point->y != 0.0 && std::fabs(point->y) < HTREE_COORD_EPS) point->y = 0.0;
 	
 	return HTREE_OK;
 }
@@ -1227,11 +1222,10 @@ static int htree_convert_edges_geometry_to_format_points(HTDocument* doc,
 static void htree_project_center_point(HTreePoint* point, const HTreePoint* toward,
 									   double center_x, double center_y)
 {
-	const double EPS = 1e-9;
 	double dx = toward->x - point->x;
 	double dy = toward->y - point->y;
 	double len2 = dx * dx + dy * dy;
-	if (len2 < EPS) {
+	if (len2 < HTREE_LENGTH_EPS) {
 		/* coinciding ends: keep the border point */
 		return;
 	}
@@ -1456,7 +1450,7 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_p
 		shelf_limit = parent->rect->width;
 	} else {
 		origin_x = origin_y = 0.0;
-		shelf_limit = 3 * (NODE_WIDTH + PADDING) + PADDING;
+		shelf_limit = HTREE_SHELF_COLUMNS * (NODE_WIDTH + PADDING) + PADDING;
 	}
 	shelf_x = origin_x + PADDING;
 	shelf_y = origin_y + PADDING;

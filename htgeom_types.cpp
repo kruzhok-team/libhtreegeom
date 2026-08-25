@@ -101,9 +101,9 @@ static double round_number(double num, unsigned int signs)
 {
 	double factor = 1.0;
  	for (unsigned int i = 0; i < signs; i++) {
-		factor *= 10.0;
+		factor *= HTREE_ROUND_BASE;
 	}
-	double value = (int)(num * factor + .5);
+	double value = (int)(num * factor + HTREE_ROUND_HALF);
     return (double)value / factor;
 }
 
