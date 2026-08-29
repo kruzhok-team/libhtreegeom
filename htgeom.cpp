@@ -1418,16 +1418,42 @@ static int htree_convert_document_geometry_to_format(HTDocument* doc,
  * Geometry transformations interface
  * ----------------------------------------------------------------------------- */
 
-/* The bounding rect of the node list (the children of a parent) */
-static int htree_children_bounding_rect(HTreeNode* children, HTreeRect** result)
+static int htree_node_is_descendant(const HTreeNode* parent, const HTreeNode* node)
+{
+	for (const HTreeNode* c = parent->children; c; c = c->next) {
+		if (c == node || htree_node_is_descendant(c, node)) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* The bounding rect of the children of a parent together with the labels of
+   the transitions the parent encloses: a label belongs to the area of the
+   node that owns both of its ends */
+static int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edges,
+										HTreeRect** result)
 {
 	std::vector<h2d::Point2dD> points;
 	std::vector<h2d::FRectD> rects;
 	std::vector<h2d::OPolyline> polylines;
 
-	int res = htree_get_nodes_collections(children, points, rects);
+	int res = htree_get_nodes_collections(parent->children, points, rects);
 	if (res != HTREE_OK) {
 		return res;
+	}
+	for (const HTreeEdge* e = edges; e; e = e->next) {
+		if (!e->source || !e->target ||
+			!htree_node_is_descendant(parent, e->source) ||
+			!htree_node_is_descendant(parent, e->target)) {
+			continue;
+		}
+		if (e->label_point) {
+			points.push_back(htree_point_to_homog(e->label_point));
+		}
+		if (e->label_rect) {
+			rects.push_back(htree_rect_to_homog(e->label_rect));
+		}
 	}
 	return htree_construct_bounding_rect(points, rects, polylines, result);
 }
@@ -1435,7 +1461,8 @@ static int htree_children_bounding_rect(HTreeNode* children, HTreeRect** result)
 /* The preserving reconstruction: the existing geometry is never modified,
    the missing children are shelf-placed inside the parent, the parent rect
    is created when missing or grown (grow-only) when the content overflows */
-static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_parent)
+static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* edges,
+											int reconstruct_parent)
 {
 	double origin_x, origin_y, shelf_limit;
 	double shelf_x, shelf_y, row_h;
@@ -1488,7 +1515,7 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_p
 			}
 		}
 		if (node->children) {
-			int res = htree_reconstruct_nodes_geometry(node, 1);
+			int res = htree_reconstruct_nodes_geometry(node, edges, 1);
 			if (res != HTREE_OK) {
 				return res;
 			}
@@ -1497,7 +1524,7 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_p
 
 	if (parent->children) {
 		HTreeRect* bbox = NULL;
-		int res = htree_children_bounding_rect(parent->children, &bbox);
+		int res = htree_children_bounding_rect(parent, edges, &bbox);
 		if (res != HTREE_OK) {
 			return res;
 		}
@@ -1530,6 +1557,126 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, int reconstruct_p
 	return HTREE_OK;
 }
 
+/* The box of the node: a point node is a degenerate rect, so the attachment
+   of an edge end lands on the point itself */
+static int htree_node_box(const HTreeNode* node, double* x, double* y, double* w, double* h)
+{
+	if (node->rect) {
+		*x = node->rect->x; *y = node->rect->y;
+		*w = node->rect->width; *h = node->rect->height;
+		return 1;
+	}
+	if (node->point) {
+		*x = node->point->x; *y = node->point->y;
+		*w = *h = 0.0;
+		return 1;
+	}
+	return 0;
+}
+
+static double htree_inset(double margin, double side)
+{
+	double limit = side / 4.0;
+	if (margin > PADDING) margin = PADDING;
+	return margin < limit ? margin : limit;
+}
+
+/* The shortest attachment that does not run into a border parallel to it:
+   perpendicular through the overlap when the nodes share a band, otherwise
+   the closest ends of the borders facing along the wider gap. Returns 0 for
+   the overlapping and nested nodes, which keep the center projection. */
+static int htree_attach_edge_minimal(HTreeEdge* edge)
+{
+	double ax, ay, aw, ah, bx, by, bw, bh;
+	double ax2, ay2, bx2, by2, sepx, sepy, m;
+	double px, py, qx, qy;
+
+	if (!htree_node_box(edge->source, &ax, &ay, &aw, &ah) ||
+		!htree_node_box(edge->target, &bx, &by, &bw, &bh)) {
+		return 0;
+	}
+	ax2 = ax + aw; ay2 = ay + ah;
+	bx2 = bx + bw; by2 = by + bh;
+	sepx = (bx - ax2 > ax - bx2) ? bx - ax2 : ax - bx2;
+	sepy = (by - ay2 > ay - by2) ? by - ay2 : ay - by2;
+
+	if (sepx <= 0.0 && sepy <= 0.0) {
+		/* one node encloses the other: cross to the nearest of its borders,
+		   the partly overlapping nodes keep the center projection */
+		int a_out = (ax <= bx && ay <= by && ax2 >= bx2 && ay2 >= by2);
+		int b_out = (bx <= ax && by <= ay && bx2 >= ax2 && by2 >= ay2);
+		double ox, oy, ox2, oy2, ix, iy, ix2, iy2, l, r, t, d, c;
+
+		if (!a_out && !b_out) {
+			return 0;
+		}
+		if (a_out) {
+			ox = ax; oy = ay; ox2 = ax2; oy2 = ay2;
+			ix = bx; iy = by; ix2 = bx2; iy2 = by2;
+		} else {
+			ox = bx; oy = by; ox2 = bx2; oy2 = by2;
+			ix = ax; iy = ay; ix2 = ax2; iy2 = ay2;
+		}
+		l = ix - ox; r = ox2 - ix2; t = iy - oy; d = oy2 - iy2;
+		if (l <= r && l <= t && l <= d) {
+			c = (iy + iy2) / 2.0;
+			px = ox; py = c; qx = ix; qy = c;
+		} else if (r <= t && r <= d) {
+			c = (iy + iy2) / 2.0;
+			px = ox2; py = c; qx = ix2; qy = c;
+		} else if (t <= d) {
+			c = (ix + ix2) / 2.0;
+			px = c; py = oy; qx = c; qy = iy;
+		} else {
+			c = (ix + ix2) / 2.0;
+			px = c; py = oy2; qx = c; qy = iy2;
+		}
+		if (!a_out) {
+			/* the enclosed node is the source */
+			c = px; px = qx; qx = c;
+			c = py; py = qy; qy = c;
+		}
+		edge->source_point = htree_new_point_coord(px, py);
+		edge->target_point = htree_new_point_coord(qx, qy);
+		return 1;
+	}
+
+	if (sepy <= 0.0) {
+		/* the horizontal band: perpendicular through the middle of the overlap */
+		double top = ay > by ? ay : by;
+		double bottom = ay2 < by2 ? ay2 : by2;
+		py = qy = (top + bottom) / 2.0;
+		if (bx >= ax2) { px = ax2; qx = bx; } else { px = ax; qx = bx2; }
+	} else if (sepx <= 0.0) {
+		double left = ax > bx ? ax : bx;
+		double right = ax2 < bx2 ? ax2 : bx2;
+		px = qx = (left + right) / 2.0;
+		if (by >= ay2) { py = ay2; qy = by; } else { py = ay; qy = by2; }
+	} else if (sepx >= sepy) {
+		/* the diagonal placement: step off the corner only as far as the
+		   45 degree incidence bound allows */
+		m = (sepx - sepy) / 2.0;
+		if (bx >= ax2) { px = ax2; qx = bx; } else { px = ax; qx = bx2; }
+		if (by >= ay2) {
+			py = ay2 - htree_inset(m, ah); qy = by + htree_inset(m, bh);
+		} else {
+			py = ay + htree_inset(m, ah); qy = by2 - htree_inset(m, bh);
+		}
+	} else {
+		m = (sepy - sepx) / 2.0;
+		if (by >= ay2) { py = ay2; qy = by; } else { py = ay; qy = by2; }
+		if (bx >= ax2) {
+			px = ax2 - htree_inset(m, aw); qx = bx + htree_inset(m, bw);
+		} else {
+			px = ax + htree_inset(m, aw); qx = bx2 - htree_inset(m, bw);
+		}
+	}
+
+	edge->source_point = htree_new_point_coord(px, py);
+	edge->target_point = htree_new_point_coord(qx, qy);
+	return 1;
+}
+
 /* The preserving edge reconstruction: only the edges with no geometry
    of their own get the straight center-to-center attachment (projected
    onto the borders) or, for the loops, a small side loop */
@@ -1556,7 +1703,7 @@ static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 			edge->target_point = htree_new_point_coord(right, cy + PADDING);
 			edge->polyline = htree_new_polyline_coord(right + PADDING, cy - PADDING);
 			htree_polyline_add_point(edge->polyline, right + PADDING, cy + PADDING);
-		} else {
+		} else if (!htree_attach_edge_minimal(edge)) {
 			int res = htree_project_edge_to_borders(edge);
 			if (res != HTREE_OK) {
 				return res;
@@ -1640,7 +1787,7 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm)
 
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
 		if (tree->nodes) {
-			res = htree_reconstruct_nodes_geometry(tree->nodes, reconstruct_sm);
+			res = htree_reconstruct_nodes_geometry(tree->nodes, tree->edges, reconstruct_sm);
 			if (res != HTREE_OK) {
 				return res;
 			}

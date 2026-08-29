@@ -1,0 +1,11 @@
+band-horizontal        (300, 150) -> (500, 150)  length 200.0
+band-vertical          (200, 200) -> (200, 400)  length 200.0
+band-partial           (300, 350) -> (500, 350)  length 200.0
+diagonal-wide          (150, 90) -> (500, 210)  length 370.0
+diagonal-tall          (140, 100) -> (210, 600)  length 504.9
+diagonal-flat          (590, 100) -> (660, 300)  length 211.9
+diagonal-even          (100, 100) -> (300, 300)  length 282.8
+point-diagonal         (350, 250) -> (300, 200)  length 70.7
+point-band             (250, 50) -> (250, 100)  length 50.0
+nested                 (0, 150) -> (100, 150)  length 100.0
+nested-inner           (100, 150) -> (0, 150)  length 100.0
