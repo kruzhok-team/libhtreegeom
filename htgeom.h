@@ -25,11 +25,16 @@
 
 #include <stddef.h>
 
-/* The version of the library corresponds to the Cyberidada-GraphML *
- *  standard version 1.0                                            */
+/* The version of the Cyberidada-GraphML standard supported by the library */
 
 #define HTREE_GEOM_MAJOR_VERSION 1
 #define HTREE_GEOM_MINOR_VERSION 0
+
+/* The version of the library itself */
+
+#define HTREE_GEOM_LIB_VERSION_MAJOR 1
+#define HTREE_GEOM_LIB_VERSION_MINOR 0
+#define HTREE_GEOM_LIB_VERSION_PATCH 6
 
 #ifdef __cplusplus
 extern "C" {

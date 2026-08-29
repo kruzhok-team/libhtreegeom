@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(htgeom VERSION 1.0 LANGUAGES CXX)
+project(htgeom VERSION 1.0.6 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -88,11 +88,18 @@ file(COPY_FILE
   ${PROJECT_SOURCE_DIR}/run-tests.sh
   ${PROJECT_BINARY_DIR}/run-tests.sh ONLY_IF_DIFFERENT)
 
-install(TARGETS htgeom DESTINATION lib EXPORT htgeom)
+install(TARGETS htgeom DESTINATION lib EXPORT htgeom
+	      COMPONENT runtime)
 install(FILES htgeom.h
-    	      DESTINATION include/cyberiada)	
+    	      DESTINATION include/cyberiada
+	      COMPONENT dev)	
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindHTGeom.cmake
-  	      DESTINATION lib/cmake)
+  	      DESTINATION lib/cmake
+	      COMPONENT dev)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/docs/architecture.md
+	      ${CMAKE_CURRENT_SOURCE_DIR}/docs/api.md
+	      DESTINATION share/doc/libhtreegeom
+	      COMPONENT dev)
 
 configure_file ("${PROJECT_SOURCE_DIR}/HTreeCPackOptions.cmake.in"
                 "${PROJECT_BINARY_DIR}/HTreeCPackOptions.cmake"

@@ -31,6 +31,10 @@ Run `cmake ..` to build the library binaries and the test program.
 
 Run `make install` to install the library.
 
+Run `cpack -G DEB` to build the Debian packages: `libhtreegeom` with the
+shared library and `libhtreegeom-dev` with the header, the CMake finder
+and the documentation.
+
 Use CMake parameters to change the build type / installation prefix / etc.
 
 ## Tests
