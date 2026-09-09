@@ -191,21 +191,6 @@ static int htree_get_collections(const HTree* trees,
 	return HTREE_OK;
 }
 
-static int htree_has_toplevel_rect(const HTDocument* doc)
-{
-	if (!doc) return 0;
-	if (!doc->trees) return 0;
-	
-	int found = 0;
-	for (HTree* tree = doc->trees; tree; tree = tree->next) {
-		if (tree->nodes && htree_node_has_toplevel_geometry(tree->nodes)) {
-			if (found) return 0;
-			found = 1;
-		}
-	}
-	return found;
-}
-
 /* -----------------------------------------------------------------------------
  * Base geometry transformations
  * ----------------------------------------------------------------------------- */
@@ -643,16 +628,10 @@ static int htree_convert_nodes_geometry_to_absolute(HTDocument* doc)
 		return HTREE_OK;
 	}
 
+	/* the top level of a tree without a root rect is relative to the global
+	   origin: the bounding rect is a summary of the content, not its frame */
 	HTreeRect parent_rect;
 	htree_init_rect(&parent_rect);
-	if (doc->node_coord_format == coordLocalCenter && doc->bounding_rect && !htree_has_toplevel_rect(doc)) {
-		int res = htree_convert_rect_geometry_to_absolute(doc->bounding_rect, &parent_rect, coordLocalCenter);
-		if (res != HTREE_OK) {
-			return res;
-		}
-		// DEBUG << "use bounding rect " << doc->bounding_rect << " as parent" << std::endl;
-		htree_set_rect(&parent_rect, doc->bounding_rect);
-	}
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
 		if (!tree->nodes) {
 			continue;
@@ -1132,9 +1111,6 @@ static int htree_convert_nodes_geometry_to_format(HTDocument* doc,
 
 	HTreeRect parent_rect;
 	htree_init_rect(&parent_rect);
-	if (new_format == coordLocalCenter && doc->bounding_rect && !htree_has_toplevel_rect(doc)) {
-		htree_set_rect(&parent_rect, doc->bounding_rect);
-	}
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
 		if (!tree->nodes) {
 			continue;

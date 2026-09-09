@@ -1,0 +1,8 @@
+absolute:
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 10, y: 20, w: 200, h: 100)}, HTreeNode {id: b, rect: (x: 300, y: 100, w: 100, h: 100)}], edges: []}], bounding rect: (x: 10, y: 20, w: 390, h: 180)}
+to center-local: 0
+HTreeDocument {nodes coord: 4, edge coord: 4, edge polylines coord: 4, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 110, y: 70, w: 200, h: 100)}, HTreeNode {id: b, rect: (x: 350, y: 150, w: 100, h: 100)}], edges: []}], bounding rect: (x: 205, y: 110, w: 390, h: 180)}
+top level is global: 1
+back to absolute: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: a, rect: (x: 10, y: 20, w: 200, h: 100)}, HTreeNode {id: b, rect: (x: 300, y: 100, w: 100, h: 100)}], edges: []}], bounding rect: (x: 10, y: 20, w: 390, h: 180)}
+round trip is identity: 1

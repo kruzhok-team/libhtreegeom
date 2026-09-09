@@ -39,7 +39,7 @@ static void round_trip(HTDocument* doc, const char* name)
 
 int main()
 {
-	/* two top-level states: the document bounding rect is the implicit parent */
+	/* two top-level states without a root rect: the global frame is the parent */
 	HTDocument* doc = htree_new_document(coordAbsolute, coordAbsolute, coordAbsolute, edgeBorder);
 	HTree* tree = htree_new_tree();
 	htree_add_tree(doc, tree);
@@ -55,7 +55,7 @@ int main()
 	edge->target = htree_find_node_by_id(tree->nodes, "b");
 	htree_add_edge(tree, edge);
 	htree_build_bounding_rect(doc, &(doc->bounding_rect));
-	round_trip(doc, "implicit bounding rect parent");
+	round_trip(doc, "global frame at the top level");
 
 	/* a single top-level composite: the node rect is the parent */
 	doc = htree_new_document(coordAbsolute, coordAbsolute, coordAbsolute, edgeBorder);

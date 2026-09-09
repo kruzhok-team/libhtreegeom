@@ -103,7 +103,8 @@ typedef enum {
 	coordNone = 0,        /* no geometry information */
 	coordAbsolute = 1,    /* absolute coordinates */ 
 	coordLeftTop = 2,     /* left-top-oriented relative coordinates */
-	coordLocalCenter = 4, /* center-oriented relative coordinates */	
+	coordLocalCenter = 4, /* center-oriented relative coordinates; the top level of a
+	                         tree without a root rect is relative to the global origin */	
 } HTCoordFormat;
 
 typedef enum {
