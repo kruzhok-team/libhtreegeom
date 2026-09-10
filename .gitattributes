@@ -1,0 +1,4 @@
+# the test reference data is compared byte by byte
+tests/*-output.txt text eol=lf
+tests/*.graphml   text eol=lf
+*.sh              text eol=lf

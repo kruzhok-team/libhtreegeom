@@ -9,7 +9,7 @@ if(run_result)
 endif()
 
 if(TEST_EXPECTED)
-  execute_process(COMMAND ${CMAKE_COMMAND} -E compare_files
+  execute_process(COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol
                           ${TEST_OUTPUT} ${TEST_EXPECTED}
                   RESULT_VARIABLE diff_result)
   if(diff_result)

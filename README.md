@@ -17,6 +17,10 @@ The documentation is located in the `docs` directory and contains:
 * The architecture - `architecture.md`
 * The interface specification - `api.md`
 
+Building on Windows is described in the
+[libcyberiadaml](https://github.com/kruzhok-team/libcyberiadaml) documentation:
+`docs/BUILD-WINDOWS.md`.
+
 ## Requirements
 
 * build-essential (c++ is required)

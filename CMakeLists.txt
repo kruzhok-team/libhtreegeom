@@ -20,12 +20,14 @@ target_include_directories(htgeom PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:include/cyberiada>)
 
-if(CMAKE_BUILD_TYPE STREQUAL Debug)
-  add_compile_options(-Wall)
-  add_compile_options(-Wextra) 
-  add_compile_options(-Wpedantic)
+if(MSVC)
+  add_compile_options($<$<CONFIG:Debug>:/W4>)
+else()
+  add_compile_options($<$<CONFIG:Debug>:-Wall>)
+  add_compile_options($<$<CONFIG:Debug>:-Wextra>)
+  add_compile_options($<$<CONFIG:Debug>:-Wpedantic>)
 endif()
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -D__DEBUG__")
+add_compile_definitions($<$<CONFIG:Debug>:__DEBUG__>)
 
 if (NOT WIN32)
    target_link_libraries(htgeom PUBLIC)
@@ -47,17 +49,11 @@ foreach(source_path ${files})
   target_include_directories("${target_name}" PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
   target_link_directories("${target_name}" PUBLIC "${PROJECT_BINARY_DIR}")
   target_link_libraries("${target_name}" PUBLIC htgeom)
-  if (WIN32)
-    add_custom_command(TARGET "${target_name}"
-      POST_BUILD
-      COMMAND copy "${PROJECT_BINARY_DIR}/${target_name}" "${PROJECT_BINARY_DIR}/tests/"
-      )
-  else()
-    add_custom_command(TARGET "${target_name}"
-      POST_BUILD
-      COMMAND ln -sf "${PROJECT_BINARY_DIR}/${target_name}" "${PROJECT_BINARY_DIR}/tests/"
-      )
-  endif()
+  add_custom_command(TARGET "${target_name}"
+    POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:${target_name}>" "${PROJECT_BINARY_DIR}/tests/"
+    )
   string(REGEX MATCH "^[0-9]+" test_num "${target_name}")
   set(expected_file "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_num}-output.txt")
   if (EXISTS "${expected_file}")
