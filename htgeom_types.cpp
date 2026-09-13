@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <cmath>
 #include <iostream>
 
 #include "htgeom.h"
@@ -103,8 +104,10 @@ static double round_number(double num, unsigned int signs)
  	for (unsigned int i = 0; i < signs; i++) {
 		factor *= HTREE_ROUND_BASE;
 	}
-	double value = (int)(num * factor + HTREE_ROUND_HALF);
-    return (double)value / factor;
+	// round half away from zero, symmetric for negatives (the old
+	// (int)(num + 0.5) truncated toward zero, drifting negative coordinates)
+	double value = std::round(num * factor);
+    return value / factor;
 }
 
 int htree_round_point(HTreePoint* p, unsigned int signs)
