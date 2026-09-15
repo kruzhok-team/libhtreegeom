@@ -1485,15 +1485,25 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 			} else {
 				node->rect = htree_new_rect_coord(shelf_x, shelf_y, w, h);
 			}
-			shelf_x += w + PADDING;
-			if (h > row_h) {
-				row_h = h;
-			}
 		}
 		if (node->children) {
 			int res = htree_reconstruct_nodes_geometry(node, edges, 1);
 			if (res != HTREE_OK) {
 				return res;
+			}
+		}
+		if (place) {
+			/* advance the shelf by the node's final size: the recursion above
+			   may have grown a composite past its default width, and advancing
+			   by the initial w would overlap the next sibling */
+			double adv_w = w, adv_h = h;
+			if (node->rect) {
+				adv_w = node->rect->width;
+				adv_h = node->rect->height;
+			}
+			shelf_x += adv_w + PADDING;
+			if (adv_h > row_h) {
+				row_h = adv_h;
 			}
 		}
 	}
