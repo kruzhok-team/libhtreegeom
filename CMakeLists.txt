@@ -21,12 +21,12 @@ target_include_directories(htgeom PUBLIC
   $<INSTALL_INTERFACE:include/cyberiada>)
 
 if(MSVC)
-  add_compile_options($<$<CONFIG:Debug>:/W4>)
+  add_compile_options(/W4)
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
-  add_compile_options($<$<CONFIG:Debug>:-Wall>)
-  add_compile_options($<$<CONFIG:Debug>:-Wextra>)
-  add_compile_options($<$<CONFIG:Debug>:-Wpedantic>)
+  add_compile_options(-Wall)
+  add_compile_options(-Wextra)
+  add_compile_options(-Wpedantic)
 endif()
 add_compile_definitions($<$<CONFIG:Debug>:__DEBUG__>)
 

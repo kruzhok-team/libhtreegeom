@@ -91,8 +91,7 @@ static int htree_get_nodes_collections(const HTreeNode* nodes,
 
 static int htree_get_edges_collections(const HTreeEdge* edges,
 									   std::vector<h2d::Point2dD>& points,
-									   std::vector<h2d::FRectD>& rects,
-									   std::vector<h2d::OPolyline>& polylines)
+									   std::vector<h2d::FRectD>& rects)
 {
 	if (edges) {
 		for (const HTreeEdge* edge = edges; edge; edge = edge->next) {
@@ -146,8 +145,7 @@ static int htree_get_edges_collections(const HTreeEdge* edges,
 
 static int htree_get_tree_collections(const HTree* tree,
 									  std::vector<h2d::Point2dD>& points,
-									  std::vector<h2d::FRectD>& rects,
-									  std::vector<h2d::OPolyline>& polylines)
+									  std::vector<h2d::FRectD>& rects)
 {
 	if (!tree) {
 		return HTREE_BAD_PARAMETER;
@@ -167,13 +165,12 @@ static int htree_get_tree_collections(const HTree* tree,
 		}
 	}
 
-	return htree_get_edges_collections(tree->edges, points, rects, polylines);
+	return htree_get_edges_collections(tree->edges, points, rects);
 }
 
 static int htree_get_collections(const HTree* trees,
 								 std::vector<h2d::Point2dD>& points,
-								 std::vector<h2d::FRectD>& rects,
-								 std::vector<h2d::OPolyline>& polylines)
+								 std::vector<h2d::FRectD>& rects)
 {
 	if (!trees) {
 		return HTREE_BAD_PARAMETER;
@@ -181,10 +178,9 @@ static int htree_get_collections(const HTree* trees,
 
 	points.clear();
 	rects.clear();
-	polylines.clear();
 	
 	for (const HTree* tree = trees; tree; tree = tree->next) {
-		int res = htree_get_tree_collections(tree, points, rects, polylines);
+		int res = htree_get_tree_collections(tree, points, rects);
 		if (res != HTREE_OK) return res;
 	}
 
@@ -400,7 +396,6 @@ static int htree_build_edges_bounding_rect(HTreeEdge* edges,
 
 static int htree_construct_bounding_rect(std::vector<h2d::Point2dD>& points,
 										 std::vector<h2d::FRectD>& rects,
-										 std::vector<h2d::OPolyline>& polylines,
 										 HTreeRect** result)
 {
 	/* a manual min/max fold: h2d::getBB throws on degenerate
@@ -433,11 +428,6 @@ static int htree_construct_bounding_rect(std::vector<h2d::Point2dD>& points,
 		add_point(pts.first.getX(), pts.first.getY());
 		add_point(pts.second.getX(), pts.second.getY());
 	}
-	for (const h2d::OPolyline& pl : polylines) {
-		for (const h2d::Point2dD& p : pl.getPts()) {
-			add_point(p.getX(), p.getY());
-		}
-	}
 
 	if (!*result) {
 		*result = htree_new_rect();
@@ -455,46 +445,6 @@ static int htree_construct_bounding_rect(std::vector<h2d::Point2dD>& points,
 	return HTREE_OK;
 }
 
-static int htree_build_nodes_bounding_rect(HTreeNode* nodes,
-										   HTreeRect** result)
-{
-	int res;
-	if (!nodes) {
-		return HTREE_BAD_PARAMETER;
-	}
-
-	std::vector<h2d::Point2dD> points;
-	std::vector<h2d::FRectD> rects;
-	std::vector<h2d::OPolyline> polylines;
-	
-	res = htree_get_nodes_collections(nodes, points, rects);
-	if (res != HTREE_OK) return res;
-
-	res = htree_construct_bounding_rect(points, rects, polylines, result);
-	
-	return res;
-}
-
-static int htree_build_tree_bounding_rect(HTree* tree,
-										  HTreeRect** result)
-{
-	int res;
-	if (!tree) {
-		return HTREE_BAD_PARAMETER;
-	}
-
-	std::vector<h2d::Point2dD> points;
-	std::vector<h2d::FRectD> rects;
-	std::vector<h2d::OPolyline> polylines;
-	
-	res = htree_get_tree_collections(tree, points, rects, polylines);
-	if (res != HTREE_OK) return res;
-
-	res = htree_construct_bounding_rect(points, rects, polylines, result);
-	
-	return res;
-}
-
 int htree_build_bounding_rect(HTDocument* doc, HTreeRect** result)
 {
 	int res;
@@ -504,12 +454,11 @@ int htree_build_bounding_rect(HTDocument* doc, HTreeRect** result)
 
 	std::vector<h2d::Point2dD> points;
 	std::vector<h2d::FRectD> rects;
-	std::vector<h2d::OPolyline> polylines;
 	
-	res = htree_get_collections(doc->trees, points, rects, polylines);
+	res = htree_get_collections(doc->trees, points, rects);
 	if (res != HTREE_OK) return res;
 
-	res = htree_construct_bounding_rect(points, rects, polylines, result);
+	res = htree_construct_bounding_rect(points, rects, result);
 
 	return res;
 }
@@ -541,20 +490,19 @@ int htree_check_geometry(const HTDocument* doc)
 		}
 		std::vector<h2d::Point2dD> points;
 		std::vector<h2d::FRectD> rects;
-		std::vector<h2d::OPolyline> polylines;
 		if (tree->nodes->children) {
 			res = htree_get_nodes_collections(tree->nodes->children, points, rects);
 			if (res != HTREE_OK) {
 				break;
 			}
 		}
-		res = htree_get_edges_collections(tree->edges, points, rects, polylines);
+		res = htree_get_edges_collections(tree->edges, points, rects);
 		if (res != HTREE_OK) {
 			break;
 		}
 
 		HTreeRect* content = NULL;
-		res = htree_construct_bounding_rect(points, rects, polylines, &content);
+		res = htree_construct_bounding_rect(points, rects, &content);
 		if (res != HTREE_OK) {
 			break;
 		}
@@ -1412,7 +1360,6 @@ static int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edge
 {
 	std::vector<h2d::Point2dD> points;
 	std::vector<h2d::FRectD> rects;
-	std::vector<h2d::OPolyline> polylines;
 
 	int res = htree_get_nodes_collections(parent->children, points, rects);
 	if (res != HTREE_OK) {
@@ -1431,7 +1378,7 @@ static int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edge
 			rects.push_back(htree_rect_to_homog(e->label_rect));
 		}
 	}
-	return htree_construct_bounding_rect(points, rects, polylines, result);
+	return htree_construct_bounding_rect(points, rects, result);
 }
 
 /* The preserving reconstruction: the existing geometry is never modified,
@@ -1710,20 +1657,19 @@ static int htree_grow_sm_border(HTree* tree)
 
 	std::vector<h2d::Point2dD> points;
 	std::vector<h2d::FRectD> rects;
-	std::vector<h2d::OPolyline> polylines;
 	if (tree->nodes->children) {
 		int res = htree_get_nodes_collections(tree->nodes->children, points, rects);
 		if (res != HTREE_OK) {
 			return res;
 		}
 	}
-	int res = htree_get_edges_collections(tree->edges, points, rects, polylines);
+	int res = htree_get_edges_collections(tree->edges, points, rects);
 	if (res != HTREE_OK) {
 		return res;
 	}
 
 	HTreeRect* content = NULL;
-	res = htree_construct_bounding_rect(points, rects, polylines, &content);
+	res = htree_construct_bounding_rect(points, rects, &content);
 	if (res != HTREE_OK) {
 		return res;
 	}

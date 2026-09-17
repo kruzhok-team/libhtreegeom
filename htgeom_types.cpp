@@ -28,7 +28,7 @@
 #include "htgeom.h"
 #include "htgeom_types.h"
 
-#define MAX_STR_LEN	4096
+#define MAX_STR_LEN	4096u
 #define OSTREAM     std::cout
 
 static int htree_copy_string(char** target, size_t* size, const char* source)
@@ -88,14 +88,6 @@ HTreePoint* htree_copy_point(const HTreePoint* src)
 	dst = htree_new_point();
 	htree_set_point(dst, src);
 	return dst;
-}
-
-static void htree_update_point(HTreePoint* p, double dx, double dy)
-{
-	if (p) {
-		p->x += dx;
-		p->y += dy;
-	}
 }
 
 static double round_number(double num, unsigned int signs)
@@ -215,13 +207,6 @@ int htree_compare_rects(const HTreeRect* a, const HTreeRect* b)
 	return a->x != b->x || a->y != b->y || a->width != b->width || a->height != b->height;	
 }
 
-static void htree_update_rect(HTreeRect* r, double dx, double dy)
-{
-	if (!r) return ;
-	r->x += dx;
-	r->y += dy;
-}
-
 int htree_round_rect(HTreeRect* r, unsigned int signs)
 {
 	if (!r) return HTREE_BAD_PARAMETER;
@@ -326,15 +311,6 @@ HTreePolyline* htree_copy_polyline(const HTreePolyline* src)
 		src = src->next;
 	} while (src);
 	return dst;	
-}
-
-static void htree_update_polyline(HTreePolyline* pl, double dx, double dy)
-{
-	if (!pl) return ;
-	do {
-		htree_update_point(&(pl->point), dx, dy);
-		pl = pl->next;
-	} while (pl);
 }
 
 int htree_destroy_polyline(HTreePolyline* polyline)
@@ -605,8 +581,8 @@ void htree_add_edge(HTree* tree, HTreeEdge* e)
 HTree* htree_copy_tree(const HTree* src)
 {
 	HTree *result = NULL, *dst;
-	HTreeNode* node, *new_node, *prev_node;
-	HTreeEdge *edge, *new_edge, *prev_edge;
+	HTreeNode *node, *new_node, *prev_node = NULL;
+	HTreeEdge *edge, *new_edge, *prev_edge = NULL;
 
 	while (src) {
 		dst = htree_new_tree();
@@ -664,7 +640,7 @@ HTree* htree_copy_tree(const HTree* src)
 
 		src = src->next;
 	}
-	return dst;	
+	return result;	
 }
 
 int htree_destroy_tree(HTree* tree)

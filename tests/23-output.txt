@@ -1,0 +1,6 @@
+=== original ===
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm-1, rect: (x: 0, y: 0, w: 150, h: 100), children: [HTreeNode {id: s, rect: (x: 10, y: 10, w: 50, h: 40)}]}], edges: []}, HTree {nodes: [HTreeNode {id: sm-2, rect: (x: 200, y: 0, w: 150, h: 100), children: [HTreeNode {id: s, rect: (x: 210, y: 10, w: 50, h: 40)}]}], edges: []}, HTree {nodes: [HTreeNode {id: sm-3, rect: (x: 400, y: 0, w: 150, h: 100), children: [HTreeNode {id: s, rect: (x: 410, y: 10, w: 50, h: 40)}]}], edges: []}], bounding rect: (x: 0, y: 0, w: 550, h: 100)}
+=== copy ===
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm-1, rect: (x: 0, y: 0, w: 150, h: 100), children: [HTreeNode {id: s, rect: (x: 10, y: 10, w: 50, h: 40)}]}], edges: []}, HTree {nodes: [HTreeNode {id: sm-2, rect: (x: 200, y: 0, w: 150, h: 100), children: [HTreeNode {id: s, rect: (x: 210, y: 10, w: 50, h: 40)}]}], edges: []}, HTree {nodes: [HTreeNode {id: sm-3, rect: (x: 400, y: 0, w: 150, h: 100), children: [HTreeNode {id: s, rect: (x: 410, y: 10, w: 50, h: 40)}]}], edges: []}], bounding rect: (x: 0, y: 0, w: 550, h: 100)}
+=== empty copy ===
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [], bounding rect: ()}
