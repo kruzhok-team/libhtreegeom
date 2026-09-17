@@ -22,6 +22,7 @@ target_include_directories(htgeom PUBLIC
 
 if(MSVC)
   add_compile_options($<$<CONFIG:Debug>:/W4>)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
   add_compile_options($<$<CONFIG:Debug>:-Wall>)
   add_compile_options($<$<CONFIG:Debug>:-Wextra>)
