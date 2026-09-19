@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.16)
 
 project(htgeom VERSION 1.0.6 LANGUAGES CXX)
 
@@ -74,16 +74,10 @@ file(GLOB test_files
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.txt"
   )
 foreach(f ${test_files})
-  get_filename_component(fname "${f}" NAME)
-  file(COPY_FILE
-    "${f}"
-    "${PROJECT_BINARY_DIR}/tests/${fname}"
-    ONLY_IF_DIFFERENT)  
+  file(COPY "${f}" DESTINATION "${PROJECT_BINARY_DIR}/tests/")
 endforeach()
 
-file(COPY_FILE
-  ${PROJECT_SOURCE_DIR}/run-tests.sh
-  ${PROJECT_BINARY_DIR}/run-tests.sh ONLY_IF_DIFFERENT)
+file(COPY "${PROJECT_SOURCE_DIR}/run-tests.sh" DESTINATION "${PROJECT_BINARY_DIR}")
 
 install(TARGETS htgeom DESTINATION lib EXPORT htgeom
 	      COMPONENT runtime)
