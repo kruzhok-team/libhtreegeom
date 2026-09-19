@@ -45,7 +45,7 @@ static int htree_copy_string(char** target, size_t* size, const char* source)
 		strsize = MAX_STR_LEN - 1;
 	}
 	target_str = (char*)malloc(strsize + 1);
-	strncpy(target_str, source, strsize);
+	memcpy(target_str, source, strsize);
 	target_str[strsize] = 0;
 	*target = target_str;
 	if (size) {
