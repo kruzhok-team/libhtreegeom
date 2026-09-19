@@ -1,8 +1,10 @@
 # Runs a test program and compares its output with the expected file.
 # Arguments: -DTEST_PROG=<binary> -DTEST_OUTPUT=<stdout capture>
-#            [-DTEST_EXPECTED=<good file>]
+#            [-DTEST_EXPECTED=<good file>] [-DTEST_EMULATOR=<cross-run wrapper>]
 
-execute_process(COMMAND ${TEST_PROG} OUTPUT_FILE ${TEST_OUTPUT}
+# TEST_EMULATOR carries CMAKE_CROSSCOMPILING_EMULATOR (e.g. wine64) so a
+# cross-built exe runs under it; empty on a native build (expands to no args)
+execute_process(COMMAND ${TEST_EMULATOR} ${TEST_PROG} OUTPUT_FILE ${TEST_OUTPUT}
                 RESULT_VARIABLE run_result)
 if(run_result)
   message(FATAL_ERROR "test run failed: ${TEST_PROG} exited with ${run_result}")

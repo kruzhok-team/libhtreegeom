@@ -63,6 +63,7 @@ foreach(source_path ${files})
         -DTEST_PROG=$<TARGET_FILE:${target_name}>
         -DTEST_OUTPUT=${PROJECT_BINARY_DIR}/tests/${target_name}.txt
         -DTEST_EXPECTED=${expected_file}
+        -DTEST_EMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunDiffTest.cmake)
   else()
     add_test(NAME "${target_name}" COMMAND "${target_name}")
