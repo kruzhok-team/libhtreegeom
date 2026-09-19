@@ -30,6 +30,16 @@ else()
 endif()
 add_compile_definitions($<$<CONFIG:Debug>:__DEBUG__>)
 
+# homog2d.hpp (bundled third-party) has a dead getBB() fallback that references a
+# non-existent member; GCC 15+ checks template bodies eagerly (-Wtemplate-body) and
+# rejects it although it is never instantiated. Silence the check where the compiler
+# has the flag (older compilers lack it and do not perform the eager check).
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-Wtemplate-body" HTGEOM_HAVE_WTEMPLATE_BODY)
+if(HTGEOM_HAVE_WTEMPLATE_BODY)
+  target_compile_options(htgeom PRIVATE -Wno-template-body)
+endif()
+
 if (NOT WIN32)
    target_link_libraries(htgeom PUBLIC)
 endif()
