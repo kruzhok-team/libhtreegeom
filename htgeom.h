@@ -62,7 +62,8 @@ typedef enum {
 	htSimpleNode = 1,       /* a simple rect node */
 	htCompositeNode = 2,    /* a composite rect node */
 	htRegion = 4,           /* a region node */
-	htPoint = 8             /* a point */
+	htPoint = 8,            /* a point */
+	htComment = 16          /* a rect comment node, excluded from the border bounds */
 } HTNodeType;
 
 typedef struct _HTreeNode {

@@ -1,0 +1,6 @@
+comment outside, check: 0
+reconstruct: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: 100, y: 100, w: 400, h: 300), children: [HTreeNode {id: s, rect: (x: 150, y: 150, w: 120, h: 80)}, HTreeNode {id: c, rect: (x: 620, y: 150, w: 120, h: 60)}]}], edges: [HTreeEdge {id: c-s, source: c, target: s, source point: (x: 620, y: 180), target point: (x: 270, y: 190)}]}], bounding rect: (x: 100, y: 100, w: 400, h: 300)}
+after reconstruct, check: 0
+comment inside, check: 0
+state outside, check: 4

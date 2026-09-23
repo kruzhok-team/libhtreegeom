@@ -65,22 +65,33 @@ static h2d::FRectD htree_rect_to_homog(const HTreeRect* rect)
 	return h2d::FRectD();
 }
 
+/* a comment node stays in the tree (its rect still projects its subject link)
+   but is excluded from the state-machine / parent border bounds, like the meta
+   node - so a comment may sit outside the border without growing it */
+static int htree_node_is_comment(const HTreeNode* node)
+{
+	return node && node->type == htComment;
+}
+
 static int htree_get_nodes_collections(const HTreeNode* nodes,
 									   std::vector<h2d::Point2dD>& points,
-									   std::vector<h2d::FRectD>& rects)
+									   std::vector<h2d::FRectD>& rects,
+									   int skip_comments)
 {
 	if (!nodes) {
 		return HTREE_BAD_PARAMETER;
 	}
 	for (const HTreeNode* node = nodes; node; node = node->next) {
-		if (node->point) {
-			points.push_back(htree_point_to_homog(node->point));
-		}
-		if (node->rect) {
-			rects.push_back(htree_rect_to_homog(node->rect));
+		if (!(skip_comments && htree_node_is_comment(node))) {
+			if (node->point) {
+				points.push_back(htree_point_to_homog(node->point));
+			}
+			if (node->rect) {
+				rects.push_back(htree_rect_to_homog(node->rect));
+			}
 		}
 		if (node->children) {
-			int res = htree_get_nodes_collections(node->children, points, rects);
+			int res = htree_get_nodes_collections(node->children, points, rects, skip_comments);
 			if (res != HTREE_OK) {
 				return res;
 			}
@@ -91,11 +102,15 @@ static int htree_get_nodes_collections(const HTreeNode* nodes,
 
 static int htree_get_edges_collections(const HTreeEdge* edges,
 									   std::vector<h2d::Point2dD>& points,
-									   std::vector<h2d::FRectD>& rects)
+									   std::vector<h2d::FRectD>& rects,
+									   int skip_comments)
 {
 	if (edges) {
 		for (const HTreeEdge* edge = edges; edge; edge = edge->next) {
 			if (!edge->source || !edge->target) continue;
+			/* a comment's subject link must not drag the border toward the comment */
+			if (skip_comments && (htree_node_is_comment(edge->source) ||
+								  htree_node_is_comment(edge->target))) continue;
 			if (edge->polyline) {
 				HTreePoint source, target;
 
@@ -159,13 +174,14 @@ static int htree_get_tree_collections(const HTree* tree,
 	}
 
 	if (tree->nodes) {
-		int res = htree_get_nodes_collections(tree->nodes, points, rects);
+		/* the whole-document / export bound keeps comments */
+		int res = htree_get_nodes_collections(tree->nodes, points, rects, 0);
 		if (res != HTREE_OK) {
 			return res;
 		}
 	}
 
-	return htree_get_edges_collections(tree->edges, points, rects);
+	return htree_get_edges_collections(tree->edges, points, rects, 0);
 }
 
 static int htree_get_collections(const HTree* trees,
@@ -491,12 +507,13 @@ int htree_check_geometry(const HTDocument* doc)
 		std::vector<h2d::Point2dD> points;
 		std::vector<h2d::FRectD> rects;
 		if (tree->nodes->children) {
-			res = htree_get_nodes_collections(tree->nodes->children, points, rects);
+			/* the border fit ignores comments: they may sit outside it */
+			res = htree_get_nodes_collections(tree->nodes->children, points, rects, 1);
 			if (res != HTREE_OK) {
 				break;
 			}
 		}
-		res = htree_get_edges_collections(tree->edges, points, rects);
+		res = htree_get_edges_collections(tree->edges, points, rects, 1);
 		if (res != HTREE_OK) {
 			break;
 		}
@@ -1361,12 +1378,15 @@ static int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edge
 	std::vector<h2d::Point2dD> points;
 	std::vector<h2d::FRectD> rects;
 
-	int res = htree_get_nodes_collections(parent->children, points, rects);
+	/* comments do not enlarge the parent border (SM, composite or region), so a
+	   comment may lie outside its parent, consistent with the model-side extent */
+	int res = htree_get_nodes_collections(parent->children, points, rects, 1);
 	if (res != HTREE_OK) {
 		return res;
 	}
 	for (const HTreeEdge* e = edges; e; e = e->next) {
 		if (!e->source || !e->target ||
+			htree_node_is_comment(e->source) || htree_node_is_comment(e->target) ||
 			!htree_node_is_descendant(parent, e->source) ||
 			!htree_node_is_descendant(parent, e->target)) {
 			continue;
@@ -1658,12 +1678,13 @@ static int htree_grow_sm_border(HTree* tree)
 	std::vector<h2d::Point2dD> points;
 	std::vector<h2d::FRectD> rects;
 	if (tree->nodes->children) {
-		int res = htree_get_nodes_collections(tree->nodes->children, points, rects);
+		/* grow the border to the content, but never toward an outside comment */
+		int res = htree_get_nodes_collections(tree->nodes->children, points, rects, 1);
 		if (res != HTREE_OK) {
 			return res;
 		}
 	}
-	int res = htree_get_edges_collections(tree->edges, points, rects);
+	int res = htree_get_edges_collections(tree->edges, points, rects, 1);
 	if (res != HTREE_OK) {
 		return res;
 	}
