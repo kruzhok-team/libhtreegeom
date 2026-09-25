@@ -19,5 +19,5 @@ set(CPACK_DEBIAN_RUNTIME_PACKAGE_NAME "libhtreegeom")
 set(CPACK_DEBIAN_RUNTIME_DESCRIPTION "The Cyberida Hierarchy Tree Geometry Library")
 
 set(CPACK_DEBIAN_DEV_PACKAGE_NAME "libhtreegeom-dev")
-set(CPACK_DEBIAN_DEV_DESCRIPTION "The Cyberida Hierarchy Tree Geometry Library development files: the header, the CMake finder and the documentation")
+set(CPACK_DEBIAN_DEV_DESCRIPTION "The Cyberida Hierarchy Tree Geometry Library development files: the header, the CMake finder and package configuration, and the documentation")
 set(CPACK_DEBIAN_DEV_PACKAGE_DEPENDS "libhtreegeom (= ${CPACK_PACKAGE_VERSION})")

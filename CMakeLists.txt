@@ -98,6 +98,9 @@ install(FILES htgeom.h
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindHTGeom.cmake
   	      DESTINATION lib/cmake
 	      COMPONENT dev)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/htgeom-config.cmake
+  	      DESTINATION lib/cmake/htgeom
+	      COMPONENT dev)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/docs/architecture.md
 	      ${CMAKE_CURRENT_SOURCE_DIR}/docs/api.md
 	      DESTINATION share/doc/libhtreegeom

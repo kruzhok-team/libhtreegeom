@@ -12,7 +12,8 @@ Added:
 - added the `htree_check_geometry` geometry validator;
 - the border to center edge conversion (the yEd export);
 - the preserving geometry reconstruction;
-- `htree_compare_rects` in the public interface.
+- `htree_compare_rects` in the public interface;
+- the CMake package configuration (`lib/cmake/htgeom`) beside the finder.
 
 ## Version 1.0
 
