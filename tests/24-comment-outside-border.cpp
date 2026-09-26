@@ -53,7 +53,7 @@ int main()
 	   reconstruction neither grows the border toward it nor moves it in */
 	HTDocument* doc = build_doc(1, 1);
 	printf("comment outside, check: %d\n", htree_check_geometry(doc));
-	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0));
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, 0));
 	htree_print_document(doc);
 	printf("after reconstruct, check: %d\n", htree_check_geometry(doc));
 	htree_destroy_document(doc);

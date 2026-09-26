@@ -86,7 +86,7 @@ static void pair(const char* id, int point_source,
 	edge->target = b;
 	htree_add_edge(tree, edge);
 
-	check(htree_reconstruct_document_geometry(doc, 0) == HTREE_OK,
+	check(htree_reconstruct_document_geometry(doc, 0, 0) == HTREE_OK,
 		  "reconstruction", id);
 	check(edge->source_point != NULL && edge->target_point != NULL,
 		  "attachment", id);

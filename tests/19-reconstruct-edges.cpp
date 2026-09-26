@@ -72,7 +72,7 @@ int main()
 	HTDocument* doc = build_doc(1);
 	printf("=== absolute ===\n");
 	htree_print_document(doc);
-	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0));
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, 0));
 	htree_print_document(doc);
 	printf("geometry check: %d\n", htree_check_geometry(doc));
 	htree_destroy_document(doc);
@@ -82,14 +82,14 @@ int main()
 	htree_convert_document_geometry(doc, coordLocalCenter, coordLocalCenter,
 									coordLocalCenter, edgeBorder);
 	printf("=== qt ===\n");
-	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0));
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, 0));
 	htree_print_document(doc);
 	htree_destroy_document(doc);
 
 	/* the SM border reconstructed around the content and the loop */
 	doc = build_doc(0);
 	printf("=== reconstruct sm ===\n");
-	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1));
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, 0));
 	htree_print_document(doc);
 	printf("geometry check: %d\n", htree_check_geometry(doc));
 	htree_destroy_document(doc);

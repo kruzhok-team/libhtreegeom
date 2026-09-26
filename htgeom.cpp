@@ -21,6 +21,7 @@
  * ----------------------------------------------------------------------------- */
 
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <vector>
 
@@ -1404,11 +1405,126 @@ static int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edge
 /* The preserving reconstruction: the existing geometry is never modified,
    the missing children are shelf-placed inside the parent, the parent rect
    is created when missing or grown (grow-only) when the content overflows */
+/* the centre of a node from its current geometry, for the reading order */
+static int htree_node_center(const HTreeNode* n, double* cx, double* cy)
+{
+	if (n->rect) {
+		*cx = n->rect->x + n->rect->width / 2.0;
+		*cy = n->rect->y + n->rect->height / 2.0;
+		return 1;
+	}
+	if (n->point) {
+		*cx = n->point->x;
+		*cy = n->point->y;
+		return 1;
+	}
+	*cx = *cy = 0.0;
+	return 0;
+}
+
+typedef struct {
+	HTreeNode* node;
+	int        has;     /* carried original geometry */
+	int        flow;    /* process-flow rank from the initial; count = unreached */
+	double     row;
+	double     x;
+	int        idx;
+} HTreeNodeOrder;
+
+/* sort by the assigned placement rank (kept in .flow) */
+static int htree_node_rank_cmp(const void* a, const void* b)
+{
+	return ((const HTreeNodeOrder*)a)->flow - ((const HTreeNodeOrder*)b)->flow;
+}
+
+/* order the children by their original reading position (top-to-bottom rows,
+   left-to-right within a row) */
+static int htree_node_spatial_cmp(const void* a, const void* b)
+{
+	const HTreeNodeOrder* p = (const HTreeNodeOrder*)a;
+	const HTreeNodeOrder* q = (const HTreeNodeOrder*)b;
+	if (p->has != q->has) return q->has - p->has;   /* placed nodes first */
+	if (p->has) {
+		if (p->row < q->row) return -1;
+		if (p->row > q->row) return 1;
+		if (p->x < q->x) return -1;
+		if (p->x > q->x) return 1;
+	}
+	return p->idx - q->idx;
+}
+
+/* store each node's placement rank from its original reading position, before
+   the geometry is cleaned, so the reconstruction reproduces the arrangement the
+   author drew in a clean coordinate frame */
+static void htree_assign_layout_ranks(HTreeNode* parent)
+{
+	size_t count = 0, k;
+	HTreeNode* child;
+	HTreeNodeOrder* kids;
+	double miny = 0.0, sumh = 0.0, tol;
+	int any = 0;
+
+	if (!parent) return;
+	for (child = parent->children; child; child = child->next) count++;
+	if (count > 0) {
+		kids = (HTreeNodeOrder*)malloc(count * sizeof(HTreeNodeOrder));
+		if (kids) {
+			k = 0;
+			for (child = parent->children; child; child = child->next, k++) {
+				double cx, cy;
+				int has = htree_node_center(child, &cx, &cy);
+				kids[k].node = child; kids[k].has = has;
+				kids[k].x = cx; kids[k].row = cy; kids[k].idx = (int)k;
+				if (has) {
+					if (!any || cy < miny) miny = cy;
+					sumh += child->rect ? child->rect->height : 0.0;
+					any = 1;
+				}
+			}
+			/* bucket the y into rows of half the mean node height so a roughly
+			   horizontal row keeps its left-to-right order instead of splitting */
+			tol = any ? (sumh / (double)count) * 0.5 : 1.0;
+			if (tol < 1.0) tol = 1.0;
+			for (k = 0; k < count; k++)
+				if (kids[k].has) kids[k].row = std::floor((kids[k].row - miny) / tol);
+			qsort(kids, count, sizeof(HTreeNodeOrder), htree_node_spatial_cmp);
+			for (k = 0; k < count; k++) kids[k].node->layout_rank = (int)k;
+			free(kids);
+		}
+	}
+	for (child = parent->children; child; child = child->next)
+		htree_assign_layout_ranks(child);
+}
+
+/* clear the geometry of a node subtree, so the reconstruction rebuilds it all */
+static void htree_clean_tree_geometry(HTreeNode* node)
+{
+	for (; node; node = node->next) {
+		if (node->rect) { htree_destroy_rect(node->rect); node->rect = NULL; }
+		if (node->point) { htree_destroy_point(node->point); node->point = NULL; }
+		if (node->children) htree_clean_tree_geometry(node->children);
+	}
+}
+
+/* shift one node and its whole subtree (not its siblings) by (dx, dy) */
+static void htree_shift_subtree(HTreeNode* node, double dx, double dy)
+{
+	HTreeNode* c;
+	if (!node) return;
+	if (node->rect) { node->rect->x += dx; node->rect->y += dy; }
+	if (node->point) { node->point->x += dx; node->point->y += dy; }
+	for (c = node->children; c; c = c->next)
+		htree_shift_subtree(c, dx, dy);
+}
+
 static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* edges,
-											int reconstruct_parent)
+											int reconstruct_parent, int ordered)
 {
 	double origin_x, origin_y, shelf_limit;
 	double shelf_x, shelf_y, row_h;
+	HTreeNodeOrder* kids = NULL;
+	size_t count = 0, k;
+	HTreeNode* child;
 
 	if (!parent) {
 		return HTREE_BAD_PARAMETER;
@@ -1426,8 +1542,72 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 	shelf_y = origin_y + PADDING;
 	row_h = 0.0;
 
-	for (HTreeNode* node = parent->children; node; node = node->next) {
+	/* the placement order: the child list order, or the original reading order
+	   (top-to-bottom rows, left-to-right) when reconstructing in full */
+	for (child = parent->children; child; child = child->next) count++;
+	if (count > 0) {
+		kids = (HTreeNodeOrder*)malloc(count * sizeof(HTreeNodeOrder));
+		if (!kids) {
+			return HTREE_BAD_PARAMETER;
+		}
+		k = 0;
+		for (child = parent->children; child; child = child->next, k++) {
+			double cx, cy;
+			kids[k].node = child;
+			kids[k].has = htree_node_center(child, &cx, &cy);
+			kids[k].x = cx; kids[k].row = cy; kids[k].idx = (int)k;
+		}
+		if (ordered) {
+			/* place the children in the flow order computed before the clean; the
+			   node list itself is untouched, so the identities and order in the
+			   document survive */
+			for (k = 0; k < count; k++) kids[k].flow = kids[k].node->layout_rank;
+			qsort(kids, count, sizeof(HTreeNodeOrder), htree_node_rank_cmp);
+		}
+	}
+
+	for (k = 0; k < count; k++) {
+		HTreeNode* node = kids[k].node;
 		double w = 0.0, h = 0.0;
+
+		if (ordered) {
+			/* the geometry was cleaned, so size the node first (a container laid
+			   out at a temporary origin) - a composite that grows past its default
+			   slot then wraps as a whole instead of overlapping its neighbours */
+			if (node->children) {
+				node->rect = htree_new_rect_coord(0.0, 0.0, NODE_WIDTH, NODE_HEIGHT);
+				int res = htree_reconstruct_nodes_geometry(node, edges, 1, ordered);
+				if (res != HTREE_OK) {
+					free(kids);
+					return res;
+				}
+				w = node->rect->width;
+				h = node->rect->height;
+			} else if (node->type == htPoint) {
+				w = h = PADDING;
+			} else {
+				w = NODE_WIDTH;
+				h = NODE_HEIGHT;
+			}
+			if (shelf_x > origin_x + PADDING &&
+				shelf_x + w + PADDING > origin_x + shelf_limit) {
+				shelf_x = origin_x + PADDING;
+				shelf_y += row_h + PADDING;
+				row_h = 0.0;
+			}
+			if (node->children) {
+				htree_shift_subtree(node, shelf_x - node->rect->x, shelf_y - node->rect->y);
+			} else if (node->type == htPoint) {
+				node->point = htree_new_point_coord(shelf_x, shelf_y);
+			} else {
+				node->rect = htree_new_rect_coord(shelf_x, shelf_y, w, h);
+			}
+			shelf_x += w + PADDING;
+			if (h > row_h) row_h = h;
+			continue;
+		}
+
+		/* the preserving fill: place only the nodes with no geometry */
 		int place = 0;
 		if (node->type == htPoint) {
 			if (!node->point) {
@@ -1454,8 +1634,9 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 			}
 		}
 		if (node->children) {
-			int res = htree_reconstruct_nodes_geometry(node, edges, 1);
+			int res = htree_reconstruct_nodes_geometry(node, edges, 1, ordered);
 			if (res != HTREE_OK) {
+				free(kids);
 				return res;
 			}
 		}
@@ -1474,6 +1655,7 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 			}
 		}
 	}
+	free(kids);
 
 	if (parent->children) {
 		HTreeRect* bbox = NULL;
@@ -1715,7 +1897,7 @@ static int htree_grow_sm_border(HTree* tree)
 	return HTREE_OK;
 }
 
-int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm)
+int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm, int ordered)
 {
 	int res;
 	HTCoordFormat node_coord_format, edge_coord_format, edge_pl_coord_format;
@@ -1739,10 +1921,26 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm)
 	}
 
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
+		if (ordered && tree->nodes) {
+			/* rank the nodes by their original reading position, then clean the
+			   geometry so the reconstruction places them in a fresh frame */
+			htree_assign_layout_ranks(tree->nodes);
+			htree_clean_tree_geometry(tree->nodes);
+		}
 		if (tree->nodes) {
-			res = htree_reconstruct_nodes_geometry(tree->nodes, tree->edges, reconstruct_sm);
+			res = htree_reconstruct_nodes_geometry(tree->nodes, tree->edges, reconstruct_sm, ordered);
 			if (res != HTREE_OK) {
 				return res;
+			}
+		}
+		if (ordered) {
+			/* drop the edge routes so they are rebuilt for the new node places */
+			for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
+				if (edge->source_point) { htree_destroy_point(edge->source_point); edge->source_point = NULL; }
+				if (edge->target_point) { htree_destroy_point(edge->target_point); edge->target_point = NULL; }
+				if (edge->label_point) { htree_destroy_point(edge->label_point); edge->label_point = NULL; }
+				if (edge->label_rect) { htree_destroy_rect(edge->label_rect); edge->label_rect = NULL; }
+				if (edge->polyline) { htree_destroy_polyline(edge->polyline); edge->polyline = NULL; }
 			}
 		}
 		res = htree_reconstruct_edges_geometry(tree->edges);

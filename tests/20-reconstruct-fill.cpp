@@ -39,7 +39,7 @@ int main()
 	htree_add_child_node(parent, htree_new_node(htSimpleNode, "s-2"));
 	printf("=== fill in the authored parent ===\n");
 	htree_print_document(doc);
-	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0));
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, 0));
 	htree_print_document(doc);
 	htree_destroy_document(doc);
 
@@ -57,7 +57,7 @@ int main()
 	htree_add_child_node(small, htree_new_node(htSimpleNode, "n-1"));
 	htree_add_child_node(small, htree_new_node(htSimpleNode, "n-2"));
 	printf("=== grow the parent and the border ===\n");
-	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0));
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, 0));
 	htree_print_document(doc);
 	printf("geometry check: %d\n", htree_check_geometry(doc));
 	htree_destroy_document(doc);
@@ -80,7 +80,7 @@ int main()
 	htree_build_bounding_rect(doc, &(doc->bounding_rect));
 	printf("=== authored no-op ===\n");
 	htree_print_document(doc);
-	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0));
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, 0));
 	htree_print_document(doc);
 	htree_destroy_document(doc);
 	return 0;

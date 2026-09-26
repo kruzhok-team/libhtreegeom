@@ -62,7 +62,7 @@ int main()
 	htree_add_node(tree, parent);
 	htree_add_child_node(parent, htree_new_node(htSimpleNode, "child"));
 	printf("reconstruct without edges: %d\n",
-		   htree_reconstruct_document_geometry(doc, 0));
+		   htree_reconstruct_document_geometry(doc, 0, 0));
 
 	/* a NULL result pointer is rejected */
 	printf("bounding rect into NULL: %d\n", htree_build_bounding_rect(doc, NULL));

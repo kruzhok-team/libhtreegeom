@@ -75,6 +75,7 @@ typedef struct _HTreeNode {
     struct _HTreeNode*      parent;
     struct _HTreeNode*      children;
     struct _HTreeNode*      next;
+    int                     layout_rank;   /* the reconstruction placement order */
 } HTreeNode;
 
 typedef struct _HTreeEdge {
@@ -196,7 +197,7 @@ typedef struct _HTDocument {
 	int                     htree_print_document(const HTDocument* doc);
 	int                     htree_build_bounding_rect(HTDocument* doc, HTreeRect** result);
 	int                     htree_check_geometry(const HTDocument* doc);
-	int                     htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm);
+	int                     htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm, int ordered);
 	int                     htree_convert_document_geometry(HTDocument* doc,
 															HTCoordFormat new_node_coord_format,
 															HTCoordFormat new_edge_coord_format,
