@@ -1818,6 +1818,11 @@ static int htree_attach_edge_minimal(HTreeEdge* edge)
 static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 {
 	for (HTreeEdge* edge = edges; edge; edge = edge->next) {
+		/* a comment link attaches to its element; a fragment link must carry no
+		   target point (9.1), so the reconstruction leaves comment links alone */
+		if (edge->source && edge->source->type == htComment) {
+			continue;
+		}
 		if (!(edge->source && (edge->source->rect || edge->source->point) &&
 			  edge->target && (edge->target->rect || edge->target->point))) {
 			continue;
@@ -1934,7 +1939,8 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm, int
 			}
 		}
 		if (ordered) {
-			/* drop the edge routes so they are rebuilt for the new node places */
+			/* drop the edge routes so they are rebuilt for the new node places
+			   (a comment link is not re-routed, so it ends with no target point) */
 			for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
 				if (edge->source_point) { htree_destroy_point(edge->source_point); edge->source_point = NULL; }
 				if (edge->target_point) { htree_destroy_point(edge->target_point); edge->target_point = NULL; }
