@@ -40,6 +40,8 @@ int main(void)
 	e = lc_edge(tree, "e-a-d", a, d, 80.0, 30.0);
 
 	htree_default_layout_options(&opts);
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutAlternate;
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, &opts));
 
 	lc_check(lc_bends(e) == 2, "two bends", "e-a-d");

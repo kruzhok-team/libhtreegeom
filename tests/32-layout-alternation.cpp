@@ -65,6 +65,8 @@ int main(void)
 
 	doc = build(&tree, &n);
 	htree_default_layout_options(&opts);
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutAlternate;
 	printf("=== alternate ===\n");
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, &opts));
 	lc_check(lc_cy(n.init) < lc_cy(n.c), "the SM flows down", "alternate");
@@ -76,7 +78,8 @@ int main(void)
 
 	doc = build(&tree, &n);
 	htree_default_layout_options(&opts);
-	opts.alternate = 0;
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutFixed;
 	printf("=== down only ===\n");
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, &opts));
 	lc_check(flows_down(n.c1, n.c2), "the composite flows down", "down only");
@@ -87,6 +90,7 @@ int main(void)
 	doc = build(&tree, &n);
 	htree_default_layout_options(&opts);
 	opts.direction = htFlowRight;
+	opts.mode = htLayoutAlternate;
 	printf("=== right root ===\n");
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, &opts));
 	lc_check(lc_cx(n.init) < lc_cx(n.c), "the SM flows right", "right root");

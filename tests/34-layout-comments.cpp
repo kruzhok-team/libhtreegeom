@@ -39,6 +39,8 @@ int main(void)
 	link = lc_edge(tree, "l-c1-a", c1, a, 0.0, 0.0);
 
 	htree_default_layout_options(&opts);
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutAlternate;
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, &opts));
 
 	lc_check(sm->rect != NULL, "the SM border kept", "sm");

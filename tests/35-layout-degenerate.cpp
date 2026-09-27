@@ -40,6 +40,8 @@ int main(void)
 	HTreeNode* sm;
 
 	htree_default_layout_options(&opts);
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutAlternate;
 
 	/* an empty state machine */
 	doc = lc_document(&tree);

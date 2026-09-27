@@ -226,12 +226,28 @@ The algorithm works in an abstract frame with a *flow* axis (the layers
 follow each other along it) and a *cross* axis (the order within a
 layer). A frame is mapped to the document coordinates by the direction
 of its container: `DOWN` maps flow to y and cross to x, `RIGHT` maps flow
-to x and cross to y. The direction alternates with the nesting depth of
-the container: the state machine lays its content out `DOWN`, a
-composite state at depth 1 lays its content out `RIGHT`, a composite at
-depth 2 `DOWN` again. A region is transparent: its content takes the
-direction of the composite that owns it. The caller chooses the root
-direction and may switch the alternation off.
+to x and cross to y. The *preferred* frame alternates with the nesting
+depth of the container: the state machine - level 0, its border never
+counts as a level - prefers `RIGHT` (a wide box, the screen is wider
+than tall), a composite state at depth 1 prefers `DOWN` (it sits in a
+column of the machine), a composite at depth 2 `RIGHT` again. A region
+is transparent: its content takes the frame of the composite that owns
+it, and the depth counts composites only.
+
+The frame actually used is chosen by the content (the adaptive mode, the
+default): the layout is bottom-up, so a container cannot see its future
+slot, but it can be laid out in both frames and compared with the target
+shape of its depth - `aspect` (1.6) for a wide preference, `1/aspect` for
+a tall one. The frame whose rect ratio is closer to the target on the log
+scale wins, a tie takes the preferred frame. A long chain therefore
+becomes a row at the machine level and a column inside a composite, while
+a wide diamond inside a composite keeps the frame that makes it squarer.
+The composite chooses one frame for all its regions from their stacked
+extents. On top of that the start is decided by the result: the whole
+tree is laid out with both starts (wide, tall, wide ... and tall, wide,
+...) and the layout whose final machine shape is closer to the wide
+target stays. The caller may instead fix one direction everywhere or
+keep the plain alternation from a chosen start (`HTLayoutMode`).
 
 ```
     SM (DOWN)                                   depth 0: flow = y
@@ -382,11 +398,15 @@ sizes are minimums: the layout never shrinks them.
 ### P1 the recursion
 
 The containers are processed children first (LayoutLocal of the 1991
-method): a composite's regions, then the composite, then its parent
-container. A container is laid out at the origin of its own frame; the
-finished subtree is shifted into place when the parent assigns its slot
-(`htree_shift_subtree`). The direction of the frame is the direction of
-the container's depth.
+method): the containers nested in a composite's regions, then the regions
+in the composite's frame, then the composite, then its parent container.
+A container is laid out at the origin of its own frame; the finished
+subtree is shifted into place when the parent assigns its slot
+(`htree_shift_subtree`). The frame of a container is chosen from its
+content against the target of its depth (the frame section); P2-P5 are
+frame independent and run once, P6 runs per candidate frame. The entry
+and exit points of a container are placed on its border by its parent,
+whose frame the crossing transitions follow.
 
 ### P2 the cycle breaking
 
@@ -543,9 +563,12 @@ under a `NULL` layout:
 
     typedef enum { htFlowDown = 0, htFlowRight } HTFlowDirection;
 
+    typedef enum { htLayoutFixed = 0, htLayoutAlternate, htLayoutAdaptive } HTLayoutMode;
+
     typedef struct {
-        HTFlowDirection direction;   /* the root frame */
-        int             alternate;   /* alternate the direction by depth */
+        HTFlowDirection direction;   /* the root frame, the preferred start */
+        HTLayoutMode    mode;        /* adaptive by default */
+        double          aspect;      /* the target width / height of a wide box */
         double          node_gap;    /* NODE_GAP */
         double          layer_gap;   /* LAYER_GAP */
         double          padding;     /* PADDING */
@@ -589,7 +612,7 @@ actions with fixed character metrics.
 `htree_reconstruct_document_geometry` dispatches on the options pointer:
 `NULL` runs the preserving fill-in of `htgeom.cpp`, an options struct
 runs `htree_layout_tree` of `htgeom_layout.cpp` for every tree. The
-tests 25-35 (`tests/layout-check.h` holds the builders and the
+tests 25-36 (`tests/layout-check.h` holds the builders and the
 readability checks H1-H4) cover the cases of the testing section.
 
 ## Determinism and Complexity
@@ -628,7 +651,11 @@ on the result before printing it:
   unlinked comment on the shelf;
 * 35 the degenerate documents: empty, points only, a single state, loops
   only, cycles without roles, parallel edges, no root rect, a submachine
-  with its border points, a top-level list.
+  with its border points, a top-level list;
+* 36 the adaptive direction: the machine-level chain runs right with and
+  without the border and as a top-level list, a chain inside a composite
+  makes the two starts compete, a single state takes the preferred frame,
+  a wide diamond takes the squarer one, the fixed mode, the option checks.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness
@@ -638,6 +665,8 @@ rate is removed from its report.
 
 * the network simplex layering when the longest path gives too wide
   layers;
+* a slot-aware direction: a second pass could re-lay a composite out for
+  the slot its parent finally gave it;
 * the Brandes-Koepf placement in place of the priority method for
   straighter long edges;
 * the orthogonal routing in channels for the dense diagrams;

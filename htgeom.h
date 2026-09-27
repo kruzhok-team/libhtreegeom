@@ -148,10 +148,19 @@ typedef enum {
 	htFlowRight = 1       /* the layers are columns, the flow runs right */
 } HTFlowDirection;
 
+/* the choice of the flow direction of a container */
+typedef enum {
+	htLayoutFixed = 0,    /* the root direction everywhere */
+	htLayoutAlternate,    /* the direction alternates with the nesting depth */
+	htLayoutAdaptive      /* by the content: the frame closer to the target shape of
+	                         the depth wins, the root start by the final result */
+} HTLayoutMode;
+
 /* the layered layout options; a value <= 0 selects the library default */
 typedef struct {
-	HTFlowDirection         direction;    /* the root frame direction */
-	int                     alternate;    /* alternate the direction by the nesting depth */
+	HTFlowDirection         direction;    /* the root frame direction (the preferred start) */
+	HTLayoutMode            mode;
+	double                  aspect;       /* the target width / height of a wide box */
 	double                  node_gap;     /* the gap between the neighbours in a layer */
 	double                  layer_gap;    /* the gap between the layers */
 	double                  padding;      /* the container padding */

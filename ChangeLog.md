@@ -7,6 +7,8 @@ Added:
 - the node roles (`HTNodeRole`) and the preset minimum sizes (`min_rect`,
   `htree_node_set_min_size`);
 - the layout options (`HTLayoutOptions`, `htree_default_layout_options`);
+- the adaptive flow direction (`HTLayoutMode`, the target aspect ratio): the
+  machine level prefers left-to-right, the content chooses the frame;
 - `htree_reconstruct_document_geometry` takes the layout options instead
   of the ordering flag (`NULL` keeps the preserving fill-in);
 

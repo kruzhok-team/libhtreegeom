@@ -39,6 +39,8 @@ int main(void)
 	lc_edge(tree, "e-c-d", c, d, 0.0, 0.0);
 
 	htree_default_layout_options(&opts);
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutAlternate;
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, &opts));
 
 	lc_check(lc_count_crossings(tree) == 0, "no crossings", "sm");

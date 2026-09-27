@@ -87,7 +87,11 @@ border). The allocating functions return NULL on failure.
   canonical form (absolute coordinates, border end points); `edgeCenter`
   targets get the center-projected end points
 * `htree_default_layout_options(opts)` - fill the layout options with the
-  library defaults (the flow down, alternating by depth)
+  library defaults (the adaptive direction: the start prefers left-to-right,
+  the content of every container chooses the frame closer to the target
+  shape of its depth, the two starts compared by the final machine shape;
+  `htLayoutAlternate` / `htLayoutFixed` select the plain alternation or one
+  direction; `aspect` is the target width / height of a wide box, 1.6)
 * `htree_reconstruct_document_geometry(doc, reconstruct_sm, layout)` - with
   a `NULL` layout the preserving fill-in: generate the missing geometry
   (shelf-placed nodes, straight border-projected edges, side loops), grow

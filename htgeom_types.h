@@ -54,6 +54,7 @@
 #define LABEL_WIDTH            80
 #define LABEL_HEIGHT           30
 #define LAYOUT_SWEEPS          8
+#define LAYOUT_ASPECT          1.6
 
 inline std::ostream& operator<<(std::ostream& os, const HTreePoint* point)
 {

@@ -38,6 +38,8 @@ int main(void)
 	lc_edge(tree, "e-c-s3", c, s3, 0.0, 0.0);
 
 	htree_default_layout_options(&opts);
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutAlternate;
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, &opts));
 
 	lc_check(s1->rect && fabs(s1->rect->width - 120.0) < LC_EPS && fabs(s1->rect->height - 50.0) < LC_EPS,

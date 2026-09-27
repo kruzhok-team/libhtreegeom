@@ -40,8 +40,9 @@ void htree_default_layout_options(HTLayoutOptions* opts)
 {
 	if (!opts) return;
 	memset(opts, 0, sizeof(HTLayoutOptions));
-	opts->direction = htFlowDown;
-	opts->alternate = 1;
+	opts->direction = htFlowRight;
+	opts->mode = htLayoutAdaptive;
+	opts->aspect = LAYOUT_ASPECT;
 	opts->node_gap = NODE_GAP;
 	opts->layer_gap = LAYER_GAP;
 	opts->padding = PADDING;
@@ -61,7 +62,11 @@ int htree_layout_check_options(const HTLayoutOptions* in, HTLayoutOptions* out)
 	if (in->direction != htFlowDown && in->direction != htFlowRight) {
 		return HTREE_BAD_PARAMETER;
 	}
+	if (in->mode != htLayoutFixed && in->mode != htLayoutAlternate && in->mode != htLayoutAdaptive) {
+		return HTREE_BAD_PARAMETER;
+	}
 	*out = *in;
+	if (out->aspect <= 0.0) out->aspect = LAYOUT_ASPECT;
 	if (out->node_gap <= 0.0) out->node_gap = NODE_GAP;
 	if (out->layer_gap <= 0.0) out->layer_gap = LAYER_GAP;
 	if (out->padding <= 0.0) out->padding = PADDING;
@@ -151,6 +156,7 @@ typedef struct {
 typedef struct {
 	HTree*                          tree;
 	HTLayoutOptions                 opts;
+	HTFlowDirection                 start;        /* the root frame of this pass */
 	int                             reconstruct_sm;
 	int                             sm_had_rect;
 	std::vector<HTLayoutContainer>  containers;   /* pre-order, 0 = the root */
@@ -202,12 +208,36 @@ static void htree_layout_size_to_frame(HTFlowDirection d, double w, double h,
 	if (d == htFlowDown) { *flow_size = h; *cross_size = w; } else { *flow_size = w; *cross_size = h; }
 }
 
-static HTFlowDirection htree_layout_direction(const HTLayoutOptions* o, int level)
+/* the preferred frame of a nesting level: the start, alternating by depth */
+static HTFlowDirection htree_layout_preferred(const HTLayoutOptions* o, HTFlowDirection start, int level)
 {
-	if (o->alternate && (level % 2) == 1) {
-		return o->direction == htFlowDown ? htFlowRight : htFlowDown;
+	if (o->mode != htLayoutFixed && (level % 2) == 1) {
+		return start == htFlowDown ? htFlowRight : htFlowDown;
 	}
-	return o->direction;
+	return start;
+}
+
+/* the target width / height of a level: a RIGHT frame means a wide box */
+static double htree_layout_target(const HTLayoutOptions* o, HTFlowDirection preferred)
+{
+	return preferred == htFlowRight ? o->aspect : 1.0 / o->aspect;
+}
+
+/* the log-scale distance of a box shape from the target ratio */
+static double htree_layout_shape_distance(double w, double h, double target)
+{
+	if (w <= 0.0 || h <= 0.0) return 0.0;
+	return std::fabs(std::log((w / h) / target));
+}
+
+/* the frame closer to the target, the preferred one on a tie */
+static HTFlowDirection htree_layout_choose(double w_down, double h_down, double w_right, double h_right,
+										   double target, HTFlowDirection preferred)
+{
+	double d_down = htree_layout_shape_distance(w_down, h_down, target);
+	double d_right = htree_layout_shape_distance(w_right, h_right, target);
+	if (std::fabs(d_down - d_right) < HTREE_COORD_EPS) return preferred;
+	return d_down < d_right ? htFlowDown : htFlowRight;
 }
 
 static HTreeNode* htree_layout_first_child(const HTLayoutContext* ctx, int ci)
@@ -250,7 +280,7 @@ static void htree_layout_collect(HTLayoutContext* ctx, HTreeNode* node, int leve
 	ctx->containers.push_back(HTLayoutContainer());
 	ctx->containers[ci].node = node;
 	ctx->containers[ci].level = level;
-	ctx->containers[ci].direction = htree_layout_direction(&ctx->opts, level);
+	ctx->containers[ci].direction = htree_layout_preferred(&ctx->opts, ctx->start, level);
 	ctx->containers[ci].shelf = 0.0;
 	if (node) {
 		ctx->index[node] = ci;
@@ -903,23 +933,82 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 	}
 }
 
-static int htree_layout_graph(HTLayoutContext* ctx, int ci, double* content_w, double* content_h)
+/* P2 - P5: the direction-independent phases */
+static void htree_layout_graph_prepare(const HTLayoutContext* ctx, int ci, HTLayoutGraph* g)
 {
-	HTLayoutGraph g;
 	std::vector<int> topo;
+	htree_layout_build_graph(ctx, ci, g);
+	htree_layout_break_cycles(g, topo);
+	htree_layout_assign_layers(g, topo);
+	htree_layout_insert_dummies(g, &ctx->opts);
+	htree_layout_order(g, &ctx->opts);
+}
+
+/* P6 in one frame: the vertex extents follow the direction, then the
+   coordinates; the content extents come back in the document axes */
+static void htree_layout_graph_frame(const HTLayoutContext* ctx, const HTLayoutGraph* base,
+									 HTFlowDirection dir, HTLayoutGraph* g, double* cw, double* ch)
+{
+	const HTLayoutOptions* o = &ctx->opts;
 	double flow_extent, cross_extent;
 
-	htree_layout_build_graph(ctx, ci, &g);
-	htree_layout_break_cycles(&g, topo);
-	htree_layout_assign_layers(&g, topo);
-	htree_layout_insert_dummies(&g, &ctx->opts);
-	htree_layout_order(&g, &ctx->opts);
-	htree_layout_assign_coordinates(&g, &ctx->opts);
-	htree_layout_normalise(&g, &flow_extent, &cross_extent);
+	*g = *base;
+	g->direction = dir;
+	for (size_t v = 0; v < g->vertices.size(); v++) {
+		HTLayoutVertex& vx = g->vertices[v];
+		if (vx.kind == htVertexReal && vx.node && vx.node->rect) {
+			htree_layout_size_to_frame(dir, vx.node->rect->width, vx.node->rect->height,
+									   &vx.flow_size, &vx.cross_size);
+			vx.before = vx.after = vx.cross_size / 2.0;
+		} else if (vx.kind == htVertexLabelDummy && vx.edge >= 0) {
+			const HTLayoutEdge& e = g->edges[vx.edge];
+			double cs;
+			if (dir == htFlowDown) { vx.flow_size = e.label_h; cs = e.label_w; }
+			else { vx.flow_size = e.label_w; cs = e.label_h; }
+			vx.before = o->padding / 2.0;
+			vx.after = cs + o->padding / 2.0;
+			vx.cross_size = vx.before + vx.after;
+		}
+	}
+	htree_layout_assign_coordinates(g, o);
+	htree_layout_normalise(g, &flow_extent, &cross_extent);
+	if (dir == htFlowDown) { *cw = cross_extent; *ch = flow_extent; }
+	else { *cw = flow_extent; *ch = cross_extent; }
+}
+
+/* the graph content laid out in the given frame, or in the frame chosen by
+   the content in the adaptive mode (dir < 0) */
+static int htree_layout_graph(HTLayoutContext* ctx, int ci, int dir, double* content_w, double* content_h)
+{
+	HTLayoutGraph base, g;
+	HTFlowDirection chosen;
+
+	htree_layout_graph_prepare(ctx, ci, &base);
+	if (dir >= 0) {
+		chosen = (HTFlowDirection)dir;
+	} else if (ctx->opts.mode == htLayoutAdaptive) {
+		HTLayoutGraph gd, gr;
+		double wd, hd, wr, hr;
+		HTFlowDirection preferred = ctx->containers[ci].direction;
+		htree_layout_graph_frame(ctx, &base, htFlowDown, &gd, &wd, &hd);
+		htree_layout_graph_frame(ctx, &base, htFlowRight, &gr, &wr, &hr);
+		chosen = htree_layout_choose(wd, hd, wr, hr, htree_layout_target(&ctx->opts, preferred), preferred);
+	} else {
+		chosen = ctx->containers[ci].direction;
+	}
+	htree_layout_graph_frame(ctx, &base, chosen, &g, content_w, content_h);
+	ctx->containers[ci].direction = chosen;
 	htree_layout_apply_graph(ctx, ci, &g);
-	if (g.direction == htFlowDown) { *content_w = cross_extent; *content_h = flow_extent; }
-	else { *content_w = flow_extent; *content_h = cross_extent; }
 	return HTREE_OK;
+}
+
+/* the extents of a graph container in a frame, no geometry written */
+static void htree_layout_graph_extents(const HTLayoutContext* ctx, int ci, HTFlowDirection dir,
+									   double* cw, double* ch)
+{
+	HTLayoutGraph base, g;
+	htree_layout_graph_prepare(ctx, ci, &base);
+	htree_layout_graph_frame(ctx, &base, dir, &g, cw, ch);
 }
 
 /* -----------------------------------------------------------------------------
@@ -933,38 +1022,6 @@ static void htree_layout_size_leaf(const HTLayoutContext* ctx, HTreeNode* node)
 	node->rect->x = node->rect->y = 0.0;
 	node->rect->width = node->min_rect ? node->min_rect->width : ctx->opts.node_width;
 	node->rect->height = node->min_rect ? node->min_rect->height : ctx->opts.node_height;
-}
-
-/* P7: the regions side by side across the flow axis, widened to the widest */
-static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w, double* content_h)
-{
-	HTLayoutContainer& c = ctx->containers[ci];
-	double max_flow = 0.0, cursor = 0.0, w = 0.0, h = 0.0;
-
-	for (HTreeNode* r = c.node->children; r; r = r->next) {
-		if (r->type != htRegion || !r->rect) continue;
-		double f = c.direction == htFlowDown ? r->rect->height : r->rect->width;
-		if (f > max_flow) max_flow = f;
-	}
-	for (HTreeNode* r = c.node->children; r; r = r->next) {
-		if (r->type != htRegion || !r->rect) continue;
-		if (c.direction == htFlowDown) {
-			r->rect->height = max_flow;
-			htree_shift_subtree(r, cursor - r->rect->x, -r->rect->y);
-			cursor += r->rect->width + ctx->opts.node_gap;
-			if (r->rect->x + r->rect->width > w) w = r->rect->x + r->rect->width;
-			h = max_flow;
-		} else {
-			r->rect->width = max_flow;
-			htree_shift_subtree(r, -r->rect->x, cursor - r->rect->y);
-			cursor += r->rect->height + ctx->opts.node_gap;
-			if (r->rect->y + r->rect->height > h) h = r->rect->y + r->rect->height;
-			w = max_flow;
-		}
-	}
-	*content_w = w;
-	*content_h = h;
-	return HTREE_OK;
 }
 
 /* P8: the container rect around the content, the title block on top */
@@ -990,20 +1047,107 @@ static void htree_layout_fit(const HTLayoutContext* ctx, const HTreeNode* node, 
 	*inset_y = title + o->padding;
 }
 
-static void htree_layout_place_border_points(HTLayoutContext* ctx, int ci)
+/* the fitted size of a region laid out in a frame, no geometry written */
+static void htree_layout_region_size(const HTLayoutContext* ctx, int ri, HTFlowDirection dir,
+									 double* W, double* H)
+{
+	double cw = 0.0, ch = 0.0, ix, iy;
+	if (ctx->containers[ri].kind == htContainerGraph) {
+		htree_layout_graph_extents(ctx, ri, dir, &cw, &ch);
+	}
+	htree_layout_fit(ctx, ctx->containers[ri].node, cw, ch, W, H, &ix, &iy);
+}
+
+/* the extents of the regions of a composite stacked across the flow axis */
+static void htree_layout_stack_extents(const HTLayoutContext* ctx, int ci, HTFlowDirection dir,
+									   double* cw, double* ch)
+{
+	const HTLayoutContainer& c = ctx->containers[ci];
+	double along = 0.0, across = 0.0;
+	int n = 0;
+	for (HTreeNode* r = c.node->children; r; r = r->next) {
+		std::map<const HTreeNode*, int>::const_iterator it;
+		double W, H;
+		if (r->type != htRegion) continue;
+		it = ctx->index.find(r);
+		if (it == ctx->index.end()) continue;
+		htree_layout_region_size(ctx, it->second, dir, &W, &H);
+		if (dir == htFlowDown) { along += W; if (H > across) across = H; }
+		else { along += H; if (W > across) across = W; }
+		n++;
+	}
+	if (n > 1) along += (n - 1) * ctx->opts.node_gap;
+	if (dir == htFlowDown) { *cw = along; *ch = across; }
+	else { *cw = across; *ch = along; }
+}
+
+static int htree_layout_container_forced(HTLayoutContext* ctx, int ci, HTFlowDirection dir);
+static int htree_layout_container(HTLayoutContext* ctx, int ci);
+
+/* P7: the regions laid out in the composite's frame, side by side across
+   the flow axis, widened to the widest */
+static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w, double* content_h)
 {
 	HTLayoutContainer& c = ctx->containers[ci];
-	int parent = c.node ? htree_layout_container_of(ctx, c.node) : -1;
-	HTFlowDirection dir = parent >= 0 ? ctx->containers[parent].direction : ctx->opts.direction;
+	HTFlowDirection dir = c.direction;
+	double max_flow = 0.0, cursor = 0.0, w = 0.0, h = 0.0;
+
+	if (ctx->opts.mode == htLayoutAdaptive) {
+		double wd, hd, wr, hr;
+		htree_layout_stack_extents(ctx, ci, htFlowDown, &wd, &hd);
+		htree_layout_stack_extents(ctx, ci, htFlowRight, &wr, &hr);
+		dir = htree_layout_choose(wd, hd, wr, hr, htree_layout_target(&ctx->opts, c.direction), c.direction);
+		c.direction = dir;
+	}
+	for (HTreeNode* r = c.node->children; r; r = r->next) {
+		std::map<const HTreeNode*, int>::const_iterator it;
+		int res;
+		if (r->type != htRegion) continue;
+		it = ctx->index.find(r);
+		if (it == ctx->index.end()) return HTREE_BAD_PARAMETER;
+		res = htree_layout_container_forced(ctx, it->second, dir);
+		if (res != HTREE_OK) return res;
+	}
+	for (HTreeNode* r = c.node->children; r; r = r->next) {
+		if (r->type != htRegion || !r->rect) continue;
+		double f = dir == htFlowDown ? r->rect->height : r->rect->width;
+		if (f > max_flow) max_flow = f;
+	}
+	for (HTreeNode* r = c.node->children; r; r = r->next) {
+		if (r->type != htRegion || !r->rect) continue;
+		if (dir == htFlowDown) {
+			r->rect->height = max_flow;
+			htree_shift_subtree(r, cursor - r->rect->x, -r->rect->y);
+			cursor += r->rect->width + ctx->opts.node_gap;
+			if (r->rect->x + r->rect->width > w) w = r->rect->x + r->rect->width;
+			h = max_flow;
+		} else {
+			r->rect->width = max_flow;
+			htree_shift_subtree(r, -r->rect->x, cursor - r->rect->y);
+			cursor += r->rect->height + ctx->opts.node_gap;
+			if (r->rect->y + r->rect->height > h) h = r->rect->y + r->rect->height;
+			w = max_flow;
+		}
+	}
+	*content_w = w;
+	*content_h = h;
+	return HTREE_OK;
+}
+
+/* the entry / exit points of a child container on its border, by the
+   direction of the parent whose transitions cross it */
+static void htree_layout_place_border_points(const HTLayoutContext* ctx, int parent, HTreeNode* node)
+{
+	HTFlowDirection dir = ctx->containers[parent].direction;
 	int entries = 0, exits = 0, ke = 0, kx = 0;
 
-	if (!c.node || !c.node->rect) return;
-	for (HTreeNode* p = c.node->children; p; p = p->next) {
+	if (!node || !node->rect) return;
+	for (HTreeNode* p = node->children; p; p = p->next) {
 		if (!htree_layout_is_border_point(p)) continue;
 		if (p->role == htRoleEntryPoint) entries++; else exits++;
 	}
-	for (HTreeNode* p = c.node->children; p; p = p->next) {
-		const HTreeRect* r = c.node->rect;
+	for (HTreeNode* p = node->children; p; p = p->next) {
+		const HTreeRect* r = node->rect;
 		double f;
 		if (!htree_layout_is_border_point(p)) continue;
 		if (!p->point) p->point = htree_new_point();
@@ -1021,31 +1165,44 @@ static void htree_layout_place_border_points(HTLayoutContext* ctx, int ci)
 	}
 }
 
-static int htree_layout_container(HTLayoutContext* ctx, int ci)
+/* P1: the children first - the nested containers laid out, the leaves sized;
+   the regions of a composite wait for the composite's frame */
+static int htree_layout_children(HTLayoutContext* ctx, int ci)
 {
-	double cw = 0.0, ch = 0.0, W, H, ix, iy;
-	int res, is_root = ci == 0;
-	HTreeNode* node;
-
 	for (HTreeNode* child = htree_layout_first_child(ctx, ci); child; child = child->next) {
 		if (htree_node_is_comment(child) || htree_layout_is_border_point(child)) continue;
 		if (htree_layout_is_container(child)) {
 			std::map<const HTreeNode*, int>::const_iterator it = ctx->index.find(child);
+			int res;
 			if (it == ctx->index.end()) return HTREE_BAD_PARAMETER;
-			res = htree_layout_container(ctx, it->second);
+			res = child->type == htRegion ? htree_layout_children(ctx, it->second)
+				: htree_layout_container(ctx, it->second);
 			if (res != HTREE_OK) return res;
 		} else {
 			htree_layout_size_leaf(ctx, child);
 		}
 	}
+	return HTREE_OK;
+}
+
+/* the content in the container's frame (dir < 0: chosen by the content),
+   then the fit, the border points of the children and the rect */
+static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
+{
+	double cw = 0.0, ch = 0.0, W, H, ix, iy;
+	int res, is_root = ci == 0;
+	HTreeNode* node;
+
 	switch (ctx->containers[ci].kind) {
 	case htContainerGraph:
-		res = htree_layout_graph(ctx, ci, &cw, &ch);
+		res = htree_layout_graph(ctx, ci, dir, &cw, &ch);
 		break;
 	case htContainerRegions:
+		if (dir >= 0) ctx->containers[ci].direction = (HTFlowDirection)dir;
 		res = htree_layout_regions(ctx, ci, &cw, &ch);
 		break;
 	default:
+		if (dir >= 0) ctx->containers[ci].direction = (HTFlowDirection)dir;
 		res = HTREE_OK;
 		break;
 	}
@@ -1055,6 +1212,7 @@ static int htree_layout_container(HTLayoutContext* ctx, int ci)
 	htree_layout_fit(ctx, node, cw, ch, &W, &H, &ix, &iy);
 	for (HTreeNode* child = htree_layout_first_child(ctx, ci); child; child = child->next) {
 		if (htree_node_is_comment(child) || htree_layout_is_border_point(child)) continue;
+		if (htree_layout_is_container(child)) htree_layout_place_border_points(ctx, ci, child);
 		htree_shift_subtree(child, ix, iy);
 	}
 	{
@@ -1074,8 +1232,20 @@ static int htree_layout_container(HTLayoutContext* ctx, int ci)
 		node->rect->width = W;
 		node->rect->height = H;
 	}
-	htree_layout_place_border_points(ctx, ci);
 	return HTREE_OK;
+}
+
+static int htree_layout_container(HTLayoutContext* ctx, int ci)
+{
+	int res = htree_layout_children(ctx, ci);
+	if (res != HTREE_OK) return res;
+	return htree_layout_finish(ctx, ci, -1);
+}
+
+/* a region: its children are already laid out by the composite */
+static int htree_layout_container_forced(HTLayoutContext* ctx, int ci, HTFlowDirection dir)
+{
+	return htree_layout_finish(ctx, ci, (int)dir);
 }
 
 /* -----------------------------------------------------------------------------
@@ -1482,17 +1652,31 @@ static void htree_layout_place_comments(HTLayoutContext* ctx, HTreeNode* nodes)
  * The tree layout
  * ----------------------------------------------------------------------------- */
 
-int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts)
+/* the final shape of the machine: the root rect, else the top-level content */
+static void htree_layout_final_shape(const HTLayoutContext* ctx, double* w, double* h)
+{
+	const HTreeNode* root = ctx->containers[0].node;
+	HTreeRect r;
+	if (root && root->rect) {
+		*w = root->rect->width;
+		*h = root->rect->height;
+		return;
+	}
+	htree_layout_content_bounds(ctx, 0, &r);
+	*w = r.width;
+	*h = r.height;
+}
+
+static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts,
+								  HTFlowDirection start, double* w, double* h)
 {
 	HTLayoutContext ctx;
 	HTreeNode* root;
 	int res;
 
-	if (!tree || !opts) {
-		return HTREE_BAD_PARAMETER;
-	}
 	ctx.tree = tree;
 	ctx.opts = *opts;
+	ctx.start = start;
 	ctx.reconstruct_sm = reconstruct_sm;
 	root = (tree->nodes && !tree->nodes->next && tree->nodes->type == htTree) ? tree->nodes : NULL;
 	ctx.sm_had_rect = root && root->rect;
@@ -1512,5 +1696,34 @@ int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* op
 	res = htree_layout_route_edges(&ctx);
 	if (res != HTREE_OK) return res;
 	htree_layout_place_comments(&ctx, tree->nodes);
-	return htree_grow_sm_border(tree);
+	res = htree_grow_sm_border(tree);
+	if (res != HTREE_OK) return res;
+	htree_layout_final_shape(&ctx, w, h);
+	return HTREE_OK;
+}
+
+/* the adaptive mode tries both starts and keeps the layout whose machine
+   shape is closer to the wide target; the geometry of the winner stays */
+int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts)
+{
+	double wr, hr, wd, hd, dr, dd;
+	int res;
+
+	if (!tree || !opts) {
+		return HTREE_BAD_PARAMETER;
+	}
+	if (opts->mode != htLayoutAdaptive) {
+		return htree_layout_tree_pass(tree, reconstruct_sm, opts, opts->direction, &wr, &hr);
+	}
+	res = htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowRight, &wr, &hr);
+	if (res != HTREE_OK) return res;
+	res = htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowDown, &wd, &hd);
+	if (res != HTREE_OK) return res;
+	dr = htree_layout_shape_distance(wr, hr, opts->aspect);
+	dd = htree_layout_shape_distance(wd, hd, opts->aspect);
+	if (dr < dd - HTREE_COORD_EPS ||
+		(std::fabs(dr - dd) <= HTREE_COORD_EPS && opts->direction == htFlowRight)) {
+		return htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowRight, &wr, &hr);
+	}
+	return HTREE_OK;
 }

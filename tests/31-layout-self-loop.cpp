@@ -40,6 +40,8 @@ static void run(HTFlowDirection direction)
 	lc_edge(tree, "e-a-fin", a, fin, 0.0, 0.0);
 
 	htree_default_layout_options(&opts);
+	opts.direction = htFlowDown;
+	opts.mode = htLayoutAlternate;
 	opts.direction = direction;
 	printf("=== %s ===\n", id);
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 1, &opts));
