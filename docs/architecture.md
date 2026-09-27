@@ -108,7 +108,7 @@ implicit parent for `coordLocalCenter` conversion
            |                                   |
            v                                   v
       rebuild bounding rect               reconstruct nodes
-           |                              (edges: stub)
+           |                              and edges
            v                                   |
       to-format (new formats)                  v
                                           rebuild bounding rect
@@ -130,17 +130,22 @@ node. A special case ("the yEd hack") binds edge labels to the edge
 source point instead of the source node for the
 absolute/local-center/absolute/`edgeCenter` format combination.
 
-Reconstruction is a preserving fill-in: the existing geometry is never
-modified. Missing children are shelf-placed inside their parent (rows
-with `PADDING` gaps, `HTREE_SHELF_COLUMNS` columns wide when the parent
-has no rect yet, default `NODE_WIDTH` x `NODE_HEIGHT` states); a
-missing parent rect is created from the children plus `PADDING`, an
-authored one only grows (grow-only, cascading bottom-up and into the
-explicit SM border, which also covers the reconstructed edge geometry).
-Edges with no geometry of their own get the straight center-to-center
-attachment projected onto the borders; a loop gets a small side loop
-with a polyline; partially specified edges are preserved. A cleaned
-(format-less) document reconstructs into the canonical absolute form.
+Reconstruction has two modes. The preserving fill-in (no layout
+options) never modifies the existing geometry: missing children are
+shelf-placed inside their parent (rows with `PADDING` gaps,
+`HTREE_SHELF_COLUMNS` columns wide when the parent has no rect yet,
+default `NODE_WIDTH` x `NODE_HEIGHT` states); a missing parent rect is
+created from the children plus `PADDING`, an authored one only grows
+(grow-only, cascading bottom-up and into the explicit SM border, which
+also covers the reconstructed edge geometry). Edges with no geometry of
+their own get the straight center-to-center attachment projected onto
+the borders; a loop gets a small side loop with a polyline; partially
+specified edges are preserved. A cleaned (format-less) document
+reconstructs into the canonical absolute form. The full layout (layout
+options given) cleans the geometry and rebuilds it from the structure by
+the layered algorithm specified in `reconstruction.md`: bottom-up per
+region, the flow direction alternating by depth, straight and polyline
+transitions.
 
 ## The homog2d Integration
 

@@ -1,5 +1,10 @@
 # libhtgeom project changelog
 
+## Unreleased
+
+Added:
+- the reconstruction layout design (`docs/reconstruction.md`).
+
 ## Version 1.0.6
 
 Fixed:
