@@ -106,6 +106,12 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/docs/architecture.md
 	      ${CMAKE_CURRENT_SOURCE_DIR}/docs/reconstruction.md
 	      DESTINATION share/doc/libhtreegeom
 	      COMPONENT dev)
+# user-facing docs travel with the runtime package (and the packaged archives)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ChangeLog.md
+	      ${CMAKE_CURRENT_SOURCE_DIR}/README.md
+	      ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
+	      DESTINATION share/doc/libhtreegeom
+	      COMPONENT runtime)
 
 configure_file ("${PROJECT_SOURCE_DIR}/HTreeCPackOptions.cmake.in"
                 "${PROJECT_BINARY_DIR}/HTreeCPackOptions.cmake"
