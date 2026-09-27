@@ -54,7 +54,7 @@ static void run(HTFlowDirection direction)
 					 loop->polyline->next->point.y > a->rect->y + a->rect->height, "the loop below", id);
 		}
 	}
-	lc_check(loop->label_rect && loop->label_point && !lc_rects_overlap(loop->label_rect, a->rect),
+	lc_check(loop->label_rect && !loop->label_point && !lc_rects_overlap(loop->label_rect, a->rect),
 			 "the label beside the loop", id);
 	lc_check(lc_bends(e1) == 0, "the other edges straight", id);
 	lc_check(lc_check_containment(sm, opts.padding) == 0, "containment", id);

@@ -508,9 +508,9 @@ placed:
 * the straight transitions between one pair of states (in either
   direction) would coincide: they are spread across the flow axis by two
   paddings each;
-* the label rect is the label dummy's rect at the dummy's slot and the
-  label point is its origin; a transition without a preset label rect
-  gets no label geometry.
+* the label rect is the label dummy's rect at the dummy's slot; no label
+  point is produced (a label carries either the point or the rect); a
+  transition without a preset label rect gets no label geometry.
 
 ### P10 the comments
 

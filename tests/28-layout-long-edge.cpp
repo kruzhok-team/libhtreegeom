@@ -45,8 +45,7 @@ int main(void)
 	lc_check(lc_bends(e) == 2, "two bends", "e-a-d");
 	lc_check(e->label_rect && fabs(e->label_rect->width - 80.0) < LC_EPS &&
 			 fabs(e->label_rect->height - 30.0) < LC_EPS, "the label size kept", "e-a-d");
-	lc_check(e->label_point && e->label_rect && fabs(e->label_point->x - e->label_rect->x) < LC_EPS &&
-			 fabs(e->label_point->y - e->label_rect->y) < LC_EPS, "the label point at the rect", "e-a-d");
+	lc_check(!e->label_point, "no label point beside the rect", "e-a-d");
 	lc_check(e->label_rect && e->label_rect->y > a->rect->y + a->rect->height &&
 			 e->label_rect->y + e->label_rect->height < c->rect->y, "the label in the tail layer", "e-a-d");
 	lc_check(e->label_rect && !lc_rects_overlap(e->label_rect, b->rect), "the label beside b", "e-a-d");

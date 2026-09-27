@@ -1183,9 +1183,6 @@ static void htree_layout_route_loop(HTLayoutContext* ctx, HTreeEdge* e)
 			e->label_rect->x = r->x + r->width + 2 * ctx->opts.padding + ctx->opts.padding / 2.0;
 			e->label_rect->y = r->y + r->height / 2.0 - h / 2.0;
 		}
-		if (!e->label_point) e->label_point = htree_new_point();
-		e->label_point->x = e->label_rect->x;
-		e->label_point->y = e->label_rect->y;
 	}
 }
 
@@ -1285,7 +1282,8 @@ static int htree_layout_route_edge(HTLayoutContext* ctx, HTreeEdge* e)
 		}
 	}
 
-	/* the label: the slot of the tail piece, or beside the first segment */
+	/* the label: the slot of the tail piece, or beside the first segment;
+	   only the rect is set - a label carries either the point or the rect */
 	if (e->label_rect) {
 		tail = htree_layout_container_of(ctx, e->source);
 		const HTLayoutPiece* piece = tail >= 0 ? htree_layout_find_piece(ctx, tail, e) : NULL;
@@ -1303,9 +1301,6 @@ static int htree_layout_route_edge(HTLayoutContext* ctx, HTreeEdge* e)
 			e->label_rect->x = (a.x + b.x) / 2.0 + ctx->opts.padding;
 			e->label_rect->y = (a.y + b.y) / 2.0 - h / 2.0;
 		}
-		if (!e->label_point) e->label_point = htree_new_point();
-		e->label_point->x = e->label_rect->x;
-		e->label_point->y = e->label_rect->y;
 	}
 	return HTREE_OK;
 }
