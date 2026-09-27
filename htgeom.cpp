@@ -1791,20 +1791,28 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
 	edge_pl_coord_format = doc->edge_pl_coord_format;
 	edge_format = doc->edge_format;
 
-	res = htree_convert_document_geometry_to_absolute(doc);
-	if (res != HTREE_OK) {
-		return res;
-	}
-
-	for (HTree* tree = doc->trees; tree; tree = tree->next) {
-		if (layout) {
-			/* the full layout: the geometry is rebuilt from the structure */
+	if (layout) {
+		/* the full layout rebuilds the geometry from the structure in the
+		   canonical form; the incoming geometry is not converted (the
+		   conversion drops the preset label sizes of the unplaced edges) */
+		for (HTree* tree = doc->trees; tree; tree = tree->next) {
 			res = htree_layout_tree(tree, reconstruct_sm, &opts);
 			if (res != HTREE_OK) {
 				return res;
 			}
-			continue;
 		}
+		doc->node_coord_format = coordAbsolute;
+		doc->edge_coord_format = coordAbsolute;
+		doc->edge_pl_coord_format = coordAbsolute;
+		doc->edge_format = edgeBorder;
+	} else {
+		res = htree_convert_document_geometry_to_absolute(doc);
+		if (res != HTREE_OK) {
+			return res;
+		}
+	}
+
+	for (HTree* tree = doc->trees; tree && !layout; tree = tree->next) {
 		if (tree->nodes) {
 			res = htree_reconstruct_nodes_geometry(tree->nodes, tree->edges, reconstruct_sm);
 			if (res != HTREE_OK) {

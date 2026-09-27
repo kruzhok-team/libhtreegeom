@@ -94,7 +94,8 @@ typedef struct {
 	int                 layer;
 	int                 order;       /* the index inside the layer */
 	double              flow_size, cross_size;
-	double              flow, cross; /* the centre in the frame */
+	double              before, after; /* the cross-axis extents around the anchor */
+	double              flow, cross; /* the anchor in the frame: the centre, or the line of a label slot */
 } HTLayoutVertex;
 
 typedef struct {
@@ -359,6 +360,7 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 		v.layer = 0;
 		v.order = 0;
 		v.flow_size = v.cross_size = 0.0;
+		v.before = v.after = 0.0;
 		v.flow = v.cross = 0.0;
 		if (k >= 1 && k <= n) {
 			HTreeNode* node = c.children[k - 1];
@@ -371,6 +373,7 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 			} else {
 				v.flow_size = v.cross_size = o->point_size;
 			}
+			v.before = v.after = v.cross_size / 2.0;
 		}
 	}
 	for (size_t k = 0; k < c.seeds.size(); k++) {
@@ -508,7 +511,7 @@ static void htree_layout_assign_layers(HTLayoutGraph* g, const std::vector<int>&
 }
 
 static int htree_layout_add_dummy(HTLayoutGraph* g, HTLayoutVertexKind kind, int edge, int layer,
-								  double flow_size, double cross_size)
+								  double flow_size, double before, double after)
 {
 	HTLayoutVertex v;
 	v.node = NULL;
@@ -518,7 +521,9 @@ static int htree_layout_add_dummy(HTLayoutGraph* g, HTLayoutVertexKind kind, int
 	v.layer = layer;
 	v.order = 0;
 	v.flow_size = flow_size;
-	v.cross_size = cross_size;
+	v.cross_size = before + after;
+	v.before = before;
+	v.after = after;
 	v.flow = v.cross = 0.0;
 	g->vertices.push_back(v);
 	return (int)g->vertices.size() - 1;
@@ -538,12 +543,14 @@ static void htree_layout_insert_dummies(HTLayoutGraph* g, const HTLayoutOptions*
 		}
 		for (int l = ls + 1; l < lt; l++) {
 			if (l == label_layer) {
+				/* the slot: the line at the anchor, the label after it */
 				double fs, cs;
-				if (g->direction == htFlowDown) { fs = e.label_h; cs = e.label_w + o->padding; }
-				else { fs = e.label_w; cs = e.label_h + o->padding; }
-				e.chain.push_back(htree_layout_add_dummy(g, htVertexLabelDummy, (int)k, l, fs, cs));
+				if (g->direction == htFlowDown) { fs = e.label_h; cs = e.label_w; }
+				else { fs = e.label_w; cs = e.label_h; }
+				e.chain.push_back(htree_layout_add_dummy(g, htVertexLabelDummy, (int)k, l, fs,
+														 o->padding / 2.0, cs + o->padding / 2.0));
 			} else {
-				e.chain.push_back(htree_layout_add_dummy(g, htVertexEdgeDummy, (int)k, l, 0.0, 0.0));
+				e.chain.push_back(htree_layout_add_dummy(g, htVertexEdgeDummy, (int)k, l, 0.0, 0.0, 0.0));
 			}
 		}
 		e.chain.push_back(e.target);
@@ -721,10 +728,10 @@ static void htree_layout_pack_layer(HTLayoutGraph* g, const HTLayoutOptions* o, 
 	double pos = 0.0;
 	for (size_t i = 0; i < L.size(); i++) {
 		HTLayoutVertex& v = g->vertices[L[i]];
-		if (i > 0) pos += htree_layout_gap(g, o, L[i - 1], L[i]) + v.cross_size / 2.0;
-		else pos = v.cross_size / 2.0;
+		if (i > 0) pos += htree_layout_gap(g, o, L[i - 1], L[i]) + v.before;
+		else pos = v.before;
 		v.cross = pos;
-		pos += v.cross_size / 2.0;
+		pos += v.after;
 	}
 }
 
@@ -736,7 +743,7 @@ static void htree_layout_centre_virtual(HTLayoutGraph* g)
 	for (size_t v = 0; v < g->vertices.size(); v++) {
 		const HTLayoutVertex& vx = g->vertices[v];
 		if (vx.kind == htVertexVirtual) continue;
-		double a = vx.cross - vx.cross_size / 2.0, b = vx.cross + vx.cross_size / 2.0;
+		double a = vx.cross - vx.before, b = vx.cross + vx.after;
 		if (!any || a < lo) lo = a;
 		if (!any || b > hi) hi = b;
 		any = 1;
@@ -765,8 +772,8 @@ static void htree_layout_priority_pass(HTLayoutGraph* g, const HTLayoutOptions* 
 		const HTLayoutVertex& v = g->vertices[L[i]];
 		const std::vector<int>& nb = fixed_up ? g->up[L[i]] : g->down[L[i]];
 		if (i > 0) {
-			off[i] = off[i - 1] + g->vertices[L[i - 1]].cross_size / 2.0 +
-				htree_layout_gap(g, o, L[i - 1], L[i]) + v.cross_size / 2.0;
+			off[i] = off[i - 1] + g->vertices[L[i - 1]].after +
+				htree_layout_gap(g, o, L[i - 1], L[i]) + v.before;
 		}
 		if (nb.empty()) {
 			d[i] = v.cross;
@@ -831,7 +838,7 @@ static void htree_layout_normalise(HTLayoutGraph* g, double* flow_extent, double
 		const HTLayoutVertex& vx = g->vertices[v];
 		if (vx.kind == htVertexVirtual) continue;
 		double fa = vx.flow - vx.flow_size / 2.0, fb = vx.flow + vx.flow_size / 2.0;
-		double ca = vx.cross - vx.cross_size / 2.0, cb = vx.cross + vx.cross_size / 2.0;
+		double ca = vx.cross - vx.before, cb = vx.cross + vx.after;
 		if (!any || fa < f0) f0 = fa;
 		if (!any || fb > f1) f1 = fb;
 		if (!any || ca < c0) c0 = ca;
@@ -875,22 +882,20 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 		for (size_t i = 1; i + 1 < e.chain.size(); i++) {
 			const HTLayoutVertex& d = g->vertices[e.chain[i]];
 			HTreePoint p;
-			double cross = d.cross;
 			if (d.kind == htVertexLabelDummy) {
-				/* the line runs along the slot edge, the label fills the slot */
-				cross = d.cross - d.cross_size / 2.0 + o->padding / 2.0;
+				/* the line runs through the anchor, the label fills the slot after it */
 				piece.has_label = 1;
 				if (g->direction == htFlowDown) {
-					piece.label.x = d.cross - d.cross_size / 2.0 + o->padding;
+					piece.label.x = d.cross + o->padding / 2.0;
 					piece.label.y = d.flow - e.label_h / 2.0;
 				} else {
 					piece.label.x = d.flow - e.label_w / 2.0;
-					piece.label.y = d.cross - d.cross_size / 2.0 + o->padding;
+					piece.label.y = d.cross + o->padding / 2.0;
 				}
 				piece.label.width = e.label_w;
 				piece.label.height = e.label_h;
 			}
-			htree_layout_to_doc(g->direction, d.flow, cross, &p.x, &p.y);
+			htree_layout_to_doc(g->direction, d.flow, d.cross, &p.x, &p.y);
 			piece.bends.push_back(p);
 		}
 		if (e.reversed) std::reverse(piece.bends.begin(), piece.bends.end());
@@ -1305,6 +1310,54 @@ static int htree_layout_route_edge(HTLayoutContext* ctx, HTreeEdge* e)
 	return HTREE_OK;
 }
 
+static int htree_layout_same_pair(const HTreeEdge* a, const HTreeEdge* b)
+{
+	return (a->source == b->source && a->target == b->target) ||
+		(a->source == b->target && a->target == b->source);
+}
+
+static void htree_layout_shift_edge(HTreeEdge* e, double dx, double dy)
+{
+	if (e->source_point) { e->source_point->x += dx; e->source_point->y += dy; }
+	if (e->target_point) { e->target_point->x += dx; e->target_point->y += dy; }
+	if (e->label_point) { e->label_point->x += dx; e->label_point->y += dy; }
+	if (e->label_rect) { e->label_rect->x += dx; e->label_rect->y += dy; }
+}
+
+/* the straight transitions between one pair of states (in either direction)
+   would coincide: spread them across the flow axis by two paddings */
+static void htree_layout_spread_pairs(HTLayoutContext* ctx)
+{
+	for (HTreeEdge* e = ctx->tree->edges; e; e = e->next) {
+		std::vector<HTreeEdge*> group;
+		int ci, across_x;
+		double step = 2 * ctx->opts.padding, k = 0.0;
+		if (!e->source || !e->target || e->source == e->target || e->polyline ||
+			!e->source_point || !e->target_point) continue;
+		for (HTreeEdge* f = e; f; f = f->next) {
+			if (f->source && f->target && f != e && f->source != f->target && !f->polyline &&
+				f->source_point && f->target_point && htree_layout_same_pair(e, f)) {
+				if (f < e) break;
+			}
+		}
+		for (HTreeEdge* f = ctx->tree->edges; f && f != e; f = f->next) {
+			if (f->source && f->target && !f->polyline && f->source_point && f->target_point &&
+				htree_layout_same_pair(e, f)) group.clear();
+		}
+		for (HTreeEdge* f = ctx->tree->edges; f; f = f->next) {
+			if (f->source && f->target && f->source != f->target && !f->polyline &&
+				f->source_point && f->target_point && htree_layout_same_pair(e, f)) group.push_back(f);
+		}
+		if (group.size() < 2 || group[0] != e) continue;
+		ci = htree_layout_container_of(ctx, e->source);
+		across_x = ci < 0 || ctx->containers[ci].direction == htFlowDown;
+		for (size_t i = 0; i < group.size(); i++, k += 1.0) {
+			double d = (k - (group.size() - 1) / 2.0) * step;
+			htree_layout_shift_edge(group[i], across_x ? d : 0.0, across_x ? 0.0 : d);
+		}
+	}
+}
+
 static int htree_layout_route_edges(HTLayoutContext* ctx)
 {
 	for (HTreeEdge* e = ctx->tree->edges; e; e = e->next) {
@@ -1319,6 +1372,7 @@ static int htree_layout_route_edges(HTLayoutContext* ctx)
 		res = htree_layout_route_edge(ctx, e);
 		if (res != HTREE_OK) return res;
 	}
+	htree_layout_spread_pairs(ctx);
 	return HTREE_OK;
 }
 

@@ -344,7 +344,7 @@ Sugiyama methods and in ELK:
     htree_reconstruct_document_geometry(doc, reconstruct_sm, layout)
       |
       v
-    to-absolute, clean the node and edge geometry (min sizes kept)
+    clean the node and edge geometry (the preset sizes kept)
       |
       v  per tree, per container, children first (P1)
     +----------------------------------------------------------------+
@@ -367,7 +367,7 @@ Sugiyama methods and in ELK:
     P9 edge routing, P10 comments, the SM border, the bounding rect
       |
       v
-    to-format (the saved formats)
+    canonical form (absolute, border ends), to-format (the saved formats)
 ```
 
 ### P0 the sizes
@@ -505,6 +505,9 @@ placed:
   parent's border at the `ENTRY` / `EXIT` end of the parent's frame;
 * a reversed edge is routed on its reversed geometry with the end
   points swapped back;
+* the straight transitions between one pair of states (in either
+  direction) would coincide: they are spread across the flow axis by two
+  paddings each;
 * the label rect is the label dummy's rect at the dummy's slot and the
   label point is its origin; a transition without a preset label rect
   gets no label geometry.
