@@ -360,6 +360,18 @@ void htree_node_set_point(HTreeNode* node, float x, float y)
 	}
 }
 
+void htree_node_set_min_size(HTreeNode* node, double w, double h)
+{
+	if (!node) return ;
+	if (!node->min_rect) {
+		node->min_rect = htree_new_rect();
+	}
+	node->min_rect->x = 0.0;
+	node->min_rect->y = 0.0;
+	node->min_rect->width = w;
+	node->min_rect->height = h;
+}
+
 void htree_add_sibling_node(HTreeNode* node, HTreeNode* new_node)
 {
 	if (!node || !new_node) return ;
@@ -402,6 +414,10 @@ HTreeNode* htree_copy_node(const HTreeNode* src)
 	}
 	if (src->rect) {
 		dst->rect = htree_copy_rect(src->rect);
+	}
+	dst->role = src->role;
+	if (src->min_rect) {
+		dst->min_rect = htree_copy_rect(src->min_rect);
 	}
 	if (src->children) {
 		for (src_child = src->children; src_child; src_child = src_child->next) {
@@ -446,6 +462,7 @@ int htree_destroy_node(HTreeNode* node)
 		}
 		if (node->point) free(node->point);
 		if (node->rect) free(node->rect);
+		if (node->min_rect) free(node->min_rect);
 		free(node);
 	}
 	return HTREE_OK;

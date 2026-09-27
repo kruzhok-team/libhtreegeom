@@ -44,6 +44,8 @@ border). The allocating functions return NULL on failure.
 * `htree_new_node(type, id)` - allocate a node of the given `HTNodeType`
 * `htree_node_set_rect(node, x, y, w, h)` / `htree_node_set_point(node, x, y)` -
   set the node geometry
+* `htree_node_set_min_size(node, w, h)` - preset the minimum size for the
+  layout (`min_rect`); the `role` field of the node is set directly
 * `htree_add_sibling_node(node, new_node)` - append to the sibling list
 * `htree_add_child_node(node, new_node)` - append a child; a simple node
   becomes composite
@@ -84,8 +86,12 @@ border). The allocating functions return NULL on failure.
   edge_format)` - convert between the coordinate formats through the
   canonical form (absolute coordinates, border end points); `edgeCenter`
   targets get the center-projected end points
-* `htree_reconstruct_document_geometry(doc, reconstruct_sm)` - the
-  preserving fill-in: generate the missing geometry (shelf-placed nodes,
-  straight border-projected edges, side loops), grow the authored parents
-  and the SM border when the content overflows; `reconstruct_sm` allows
-  creating the missing SM border rect
+* `htree_default_layout_options(opts)` - fill the layout options with the
+  library defaults (the flow down, alternating by depth)
+* `htree_reconstruct_document_geometry(doc, reconstruct_sm, layout)` - with
+  a `NULL` layout the preserving fill-in: generate the missing geometry
+  (shelf-placed nodes, straight border-projected edges, side loops), grow
+  the authored parents and the SM border when the content overflows; with
+  the layout options the full layered layout of `docs/reconstruction.md`
+  (the geometry is rebuilt from the structure, the roles and the preset
+  sizes); `reconstruct_sm` allows creating the missing SM border rect

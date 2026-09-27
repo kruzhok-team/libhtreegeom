@@ -47,6 +47,14 @@
 /* the shelf width (in the node columns) for a parent without a rect */
 #define HTREE_SHELF_COLUMNS    3
 
+/* the layered layout defaults (docs/reconstruction.md) */
+#define POINT_SIZE             20
+#define NODE_GAP               40
+#define LAYER_GAP              60
+#define LABEL_WIDTH            80
+#define LABEL_HEIGHT           30
+#define LAYOUT_SWEEPS          8
+
 inline std::ostream& operator<<(std::ostream& os, const HTreePoint* point)
 {
 	if (point) {
@@ -93,6 +101,12 @@ inline std::ostream& operator<<(std::ostream& os, const HTreeNode* node)
 		}
 		if (node->rect) {
 			os << ", rect: " << node->rect;
+		}
+		if (node->role != htRoleNone) {
+			os << ", role: " << node->role;
+		}
+		if (node->min_rect) {
+			os << ", min: (w: " << node->min_rect->width << ", h: " << node->min_rect->height << ")";
 		}
 		if (node->children) {
 			os << ", children: [";

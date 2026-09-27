@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(htgeom VERSION 1.0.6 LANGUAGES CXX)
+project(htgeom VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,7 @@ if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/homog2d.hpp)
   message(FATAL_ERROR "Cannot find homog2d.hpp (download here: https://github.com/skramm/homog2d)")
 endif()
 
-add_library(htgeom SHARED htgeom_types.cpp htgeom.cpp)
+add_library(htgeom SHARED htgeom_types.cpp htgeom.cpp htgeom_layout.cpp)
 target_include_directories(htgeom PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:include/cyberiada>)
@@ -103,6 +103,7 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/htgeom-config.cmake
 	      COMPONENT dev)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/docs/architecture.md
 	      ${CMAKE_CURRENT_SOURCE_DIR}/docs/api.md
+	      ${CMAKE_CURRENT_SOURCE_DIR}/docs/reconstruction.md
 	      DESTINATION share/doc/libhtreegeom
 	      COMPONENT dev)
 

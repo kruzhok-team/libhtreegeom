@@ -31,6 +31,14 @@ header-only homog2d library.
     |  destroy/round/print   | |  bounding rect,        | |  segment x rect        |
     |                        | |  reconstruction        | |  intersection          |
     +------------------------+ +------------------------+ +------------------------+
+                                           |
+                                           | htgeom_internal.h
+                                           v
+                                htgeom_layout.cpp
+                               +------------------------+
+                               |  the layered layout    |
+                               |  (docs/reconstruction) |
+                               +------------------------+
                 ^                   |            |                   ^
                 |                   |            |                   |
                 +---- alloc/free ---+            +---- geometry -----+
@@ -179,7 +187,7 @@ back into the model and destroys the document.
 
 ## Building and Testing
 
-CMake builds the shared `htgeom` library from the two `.cpp` files and
+CMake builds the shared `htgeom` library from the three `.cpp` files and
 one `<NN>-<name>.test` executable per `tests/*.cpp` file, registered
 with CTest. Each test prints its document through the `operator<<`
 overloads of `htgeom_types.h`; `cmake/RunDiffTest.cmake` runs the
@@ -193,5 +201,8 @@ test 11 the transform error codes, tests 12-16 the conversion matrix
 (round trips of the three main formats, the pairwise chain, the two
 local-center parents, the center-to-border projection, the off-preset
 combinations), test 17 six levels of nested states, test 18 the
-border-to-center projection, tests 19-20 the reconstruction (the edge
-fill-in and the preserving shelf placement with the grow-only parents).
+border-to-center projection, tests 19-21 and 24 the reconstruction
+fill-in (the edge fill-in, the preserving shelf placement with the
+grow-only parents, the minimal attachment, the comment outside the
+border), tests 25-35 the layered layout (`tests/layout-check.h` holds
+the builders and the readability checks).

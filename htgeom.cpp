@@ -29,6 +29,7 @@
 
 #include "htgeom.h"
 #include "htgeom_types.h"
+#include "htgeom_internal.h"
 
 #ifdef __DEBUG__
 #define DEBUG      std::cerr  
@@ -69,7 +70,7 @@ static h2d::FRectD htree_rect_to_homog(const HTreeRect* rect)
 /* a comment node stays in the tree (its rect still projects its subject link)
    but is excluded from the state-machine / parent border bounds, like the meta
    node - so a comment may sit outside the border without growing it */
-static int htree_node_is_comment(const HTreeNode* node)
+int htree_node_is_comment(const HTreeNode* node)
 {
 	return node && node->type == htComment;
 }
@@ -702,7 +703,7 @@ static int htree_convert_edges_geometry_to_absolute_points(HTDocument* doc)
 
 /* Fill the missing edge ends with the node centers and project both
    ends onto the node borders */
-static int htree_project_edge_to_borders(HTreeEdge* edge)
+int htree_project_edge_to_borders(HTreeEdge* edge)
 {
 	if (!edge->source_point) {
 		if (edge->source->rect) {
@@ -874,7 +875,7 @@ static int htree_convert_edges_geometry_to_absolute(HTDocument* doc)
 	return HTREE_OK;
 }
 
-static int htree_convert_document_geometry_to_absolute(HTDocument* doc)
+int htree_convert_document_geometry_to_absolute(HTDocument* doc)
 {
 	int res;
 	if (!doc) {
@@ -1360,7 +1361,7 @@ static int htree_convert_document_geometry_to_format(HTDocument* doc,
  * Geometry transformations interface
  * ----------------------------------------------------------------------------- */
 
-static int htree_node_is_descendant(const HTreeNode* parent, const HTreeNode* node)
+int htree_node_is_descendant(const HTreeNode* parent, const HTreeNode* node)
 {
 	for (const HTreeNode* c = parent->children; c; c = c->next) {
 		if (c == node || htree_node_is_descendant(c, node)) {
@@ -1373,7 +1374,7 @@ static int htree_node_is_descendant(const HTreeNode* parent, const HTreeNode* no
 /* The bounding rect of the children of a parent together with the labels of
    the transitions the parent encloses: a label belongs to the area of the
    node that owns both of its ends */
-static int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edges,
+int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edges,
 										HTreeRect** result)
 {
 	std::vector<h2d::Point2dD> points;
@@ -1405,99 +1406,8 @@ static int htree_children_bounding_rect(HTreeNode* parent, const HTreeEdge* edge
 /* The preserving reconstruction: the existing geometry is never modified,
    the missing children are shelf-placed inside the parent, the parent rect
    is created when missing or grown (grow-only) when the content overflows */
-/* the centre of a node from its current geometry, for the reading order */
-static int htree_node_center(const HTreeNode* n, double* cx, double* cy)
-{
-	if (n->rect) {
-		*cx = n->rect->x + n->rect->width / 2.0;
-		*cy = n->rect->y + n->rect->height / 2.0;
-		return 1;
-	}
-	if (n->point) {
-		*cx = n->point->x;
-		*cy = n->point->y;
-		return 1;
-	}
-	*cx = *cy = 0.0;
-	return 0;
-}
-
-typedef struct {
-	HTreeNode* node;
-	int        has;     /* carried original geometry */
-	int        flow;    /* process-flow rank from the initial; count = unreached */
-	double     row;
-	double     x;
-	int        idx;
-} HTreeNodeOrder;
-
-/* sort by the assigned placement rank (kept in .flow) */
-static int htree_node_rank_cmp(const void* a, const void* b)
-{
-	return ((const HTreeNodeOrder*)a)->flow - ((const HTreeNodeOrder*)b)->flow;
-}
-
-/* order the children by their original reading position (top-to-bottom rows,
-   left-to-right within a row) */
-static int htree_node_spatial_cmp(const void* a, const void* b)
-{
-	const HTreeNodeOrder* p = (const HTreeNodeOrder*)a;
-	const HTreeNodeOrder* q = (const HTreeNodeOrder*)b;
-	if (p->has != q->has) return q->has - p->has;   /* placed nodes first */
-	if (p->has) {
-		if (p->row < q->row) return -1;
-		if (p->row > q->row) return 1;
-		if (p->x < q->x) return -1;
-		if (p->x > q->x) return 1;
-	}
-	return p->idx - q->idx;
-}
-
-/* store each node's placement rank from its original reading position, before
-   the geometry is cleaned, so the reconstruction reproduces the arrangement the
-   author drew in a clean coordinate frame */
-static void htree_assign_layout_ranks(HTreeNode* parent)
-{
-	size_t count = 0, k;
-	HTreeNode* child;
-	HTreeNodeOrder* kids;
-	double miny = 0.0, sumh = 0.0, tol;
-	int any = 0;
-
-	if (!parent) return;
-	for (child = parent->children; child; child = child->next) count++;
-	if (count > 0) {
-		kids = (HTreeNodeOrder*)malloc(count * sizeof(HTreeNodeOrder));
-		if (kids) {
-			k = 0;
-			for (child = parent->children; child; child = child->next, k++) {
-				double cx, cy;
-				int has = htree_node_center(child, &cx, &cy);
-				kids[k].node = child; kids[k].has = has;
-				kids[k].x = cx; kids[k].row = cy; kids[k].idx = (int)k;
-				if (has) {
-					if (!any || cy < miny) miny = cy;
-					sumh += child->rect ? child->rect->height : 0.0;
-					any = 1;
-				}
-			}
-			/* bucket the y into rows of half the mean node height so a roughly
-			   horizontal row keeps its left-to-right order instead of splitting */
-			tol = any ? (sumh / (double)count) * 0.5 : 1.0;
-			if (tol < 1.0) tol = 1.0;
-			for (k = 0; k < count; k++)
-				if (kids[k].has) kids[k].row = std::floor((kids[k].row - miny) / tol);
-			qsort(kids, count, sizeof(HTreeNodeOrder), htree_node_spatial_cmp);
-			for (k = 0; k < count; k++) kids[k].node->layout_rank = (int)k;
-			free(kids);
-		}
-	}
-	for (child = parent->children; child; child = child->next)
-		htree_assign_layout_ranks(child);
-}
-
 /* clear the geometry of a node subtree, so the reconstruction rebuilds it all */
-static void htree_clean_tree_geometry(HTreeNode* node)
+void htree_clean_tree_geometry(HTreeNode* node)
 {
 	for (; node; node = node->next) {
 		if (node->rect) { htree_destroy_rect(node->rect); node->rect = NULL; }
@@ -1507,7 +1417,7 @@ static void htree_clean_tree_geometry(HTreeNode* node)
 }
 
 /* shift one node and its whole subtree (not its siblings) by (dx, dy) */
-static void htree_shift_subtree(HTreeNode* node, double dx, double dy)
+void htree_shift_subtree(HTreeNode* node, double dx, double dy)
 {
 	HTreeNode* c;
 	if (!node) return;
@@ -1518,13 +1428,11 @@ static void htree_shift_subtree(HTreeNode* node, double dx, double dy)
 }
 
 static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* edges,
-											int reconstruct_parent, int ordered)
+											int reconstruct_parent)
 {
 	double origin_x, origin_y, shelf_limit;
 	double shelf_x, shelf_y, row_h;
-	HTreeNodeOrder* kids = NULL;
-	size_t count = 0, k;
-	HTreeNode* child;
+	HTreeNode* node;
 
 	if (!parent) {
 		return HTREE_BAD_PARAMETER;
@@ -1542,72 +1450,9 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 	shelf_y = origin_y + PADDING;
 	row_h = 0.0;
 
-	/* the placement order: the child list order, or the original reading order
-	   (top-to-bottom rows, left-to-right) when reconstructing in full */
-	for (child = parent->children; child; child = child->next) count++;
-	if (count > 0) {
-		kids = (HTreeNodeOrder*)malloc(count * sizeof(HTreeNodeOrder));
-		if (!kids) {
-			return HTREE_BAD_PARAMETER;
-		}
-		k = 0;
-		for (child = parent->children; child; child = child->next, k++) {
-			double cx, cy;
-			kids[k].node = child;
-			kids[k].has = htree_node_center(child, &cx, &cy);
-			kids[k].x = cx; kids[k].row = cy; kids[k].idx = (int)k;
-		}
-		if (ordered) {
-			/* place the children in the flow order computed before the clean; the
-			   node list itself is untouched, so the identities and order in the
-			   document survive */
-			for (k = 0; k < count; k++) kids[k].flow = kids[k].node->layout_rank;
-			qsort(kids, count, sizeof(HTreeNodeOrder), htree_node_rank_cmp);
-		}
-	}
-
-	for (k = 0; k < count; k++) {
-		HTreeNode* node = kids[k].node;
+	/* the preserving fill: place only the nodes with no geometry, in the child order */
+	for (node = parent->children; node; node = node->next) {
 		double w = 0.0, h = 0.0;
-
-		if (ordered) {
-			/* the geometry was cleaned, so size the node first (a container laid
-			   out at a temporary origin) - a composite that grows past its default
-			   slot then wraps as a whole instead of overlapping its neighbours */
-			if (node->children) {
-				node->rect = htree_new_rect_coord(0.0, 0.0, NODE_WIDTH, NODE_HEIGHT);
-				int res = htree_reconstruct_nodes_geometry(node, edges, 1, ordered);
-				if (res != HTREE_OK) {
-					free(kids);
-					return res;
-				}
-				w = node->rect->width;
-				h = node->rect->height;
-			} else if (node->type == htPoint) {
-				w = h = PADDING;
-			} else {
-				w = NODE_WIDTH;
-				h = NODE_HEIGHT;
-			}
-			if (shelf_x > origin_x + PADDING &&
-				shelf_x + w + PADDING > origin_x + shelf_limit) {
-				shelf_x = origin_x + PADDING;
-				shelf_y += row_h + PADDING;
-				row_h = 0.0;
-			}
-			if (node->children) {
-				htree_shift_subtree(node, shelf_x - node->rect->x, shelf_y - node->rect->y);
-			} else if (node->type == htPoint) {
-				node->point = htree_new_point_coord(shelf_x, shelf_y);
-			} else {
-				node->rect = htree_new_rect_coord(shelf_x, shelf_y, w, h);
-			}
-			shelf_x += w + PADDING;
-			if (h > row_h) row_h = h;
-			continue;
-		}
-
-		/* the preserving fill: place only the nodes with no geometry */
 		int place = 0;
 		if (node->type == htPoint) {
 			if (!node->point) {
@@ -1634,9 +1479,8 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 			}
 		}
 		if (node->children) {
-			int res = htree_reconstruct_nodes_geometry(node, edges, 1, ordered);
+			int res = htree_reconstruct_nodes_geometry(node, edges, 1);
 			if (res != HTREE_OK) {
-				free(kids);
 				return res;
 			}
 		}
@@ -1655,7 +1499,6 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 			}
 		}
 	}
-	free(kids);
 
 	if (parent->children) {
 		HTreeRect* bbox = NULL;
@@ -1694,7 +1537,7 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 
 /* The box of the node: a point node is a degenerate rect, so the attachment
    of an edge end lands on the point itself */
-static int htree_node_box(const HTreeNode* node, double* x, double* y, double* w, double* h)
+int htree_node_box(const HTreeNode* node, double* x, double* y, double* w, double* h)
 {
 	if (node->rect) {
 		*x = node->rect->x; *y = node->rect->y;
@@ -1720,7 +1563,7 @@ static double htree_inset(double margin, double side)
    perpendicular through the overlap when the nodes share a band, otherwise
    the closest ends of the borders facing along the wider gap. Returns 0 for
    the overlapping and nested nodes, which keep the center projection. */
-static int htree_attach_edge_minimal(HTreeEdge* edge)
+int htree_attach_edge_minimal(HTreeEdge* edge)
 {
 	double ax, ay, aw, ah, bx, by, bw, bh;
 	double ax2, ay2, bx2, by2, sepx, sepy, m;
@@ -1812,6 +1655,39 @@ static int htree_attach_edge_minimal(HTreeEdge* edge)
 	return 1;
 }
 
+/* The side loop of a self-transition: a small loop outside the right
+   border (or the bottom one), the ends PADDING apart around the middle */
+int htree_reconstruct_edge_loop(HTreeEdge* edge, int bottom_side)
+{
+	const HTreeRect* r;
+	double right, bottom, cx, cy;
+
+	if (!edge || !edge->source || !edge->source->rect) {
+		return HTREE_BAD_PARAMETER;
+	}
+	r = edge->source->rect;
+	right = r->x + r->width;
+	bottom = r->y + r->height;
+	cx = r->x + r->width / 2.0;
+	cy = r->y + r->height / 2.0;
+	edge->source_point = htree_new_point();
+	edge->target_point = htree_new_point();
+	edge->polyline = htree_new_polyline();
+	edge->polyline->next = htree_new_polyline();
+	if (bottom_side) {
+		edge->source_point->x = cx - PADDING; edge->source_point->y = bottom;
+		edge->target_point->x = cx + PADDING; edge->target_point->y = bottom;
+		edge->polyline->point.x = cx - PADDING; edge->polyline->point.y = bottom + PADDING;
+		edge->polyline->next->point.x = cx + PADDING; edge->polyline->next->point.y = bottom + PADDING;
+	} else {
+		edge->source_point->x = right; edge->source_point->y = cy - PADDING;
+		edge->target_point->x = right; edge->target_point->y = cy + PADDING;
+		edge->polyline->point.x = right + PADDING; edge->polyline->point.y = cy - PADDING;
+		edge->polyline->next->point.x = right + PADDING; edge->polyline->next->point.y = cy + PADDING;
+	}
+	return HTREE_OK;
+}
+
 /* The preserving edge reconstruction: only the edges with no geometry
    of their own get the straight center-to-center attachment (projected
    onto the borders) or, for the loops, a small side loop */
@@ -1832,17 +1708,7 @@ static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 			continue;
 		}
 		if (edge->source == edge->target) {
-			/* the side loop on the right border */
-			if (!edge->source->rect) {
-				continue;
-			}
-			const HTreeRect* r = edge->source->rect;
-			double right = r->x + r->width;
-			double cy = r->y + r->height / 2.0;
-			edge->source_point = htree_new_point_coord(right, cy - PADDING);
-			edge->target_point = htree_new_point_coord(right, cy + PADDING);
-			edge->polyline = htree_new_polyline_coord(right + PADDING, cy - PADDING);
-			htree_polyline_add_point(edge->polyline, right + PADDING, cy + PADDING);
+			htree_reconstruct_edge_loop(edge, 0);
 		} else if (!htree_attach_edge_minimal(edge)) {
 			int res = htree_project_edge_to_borders(edge);
 			if (res != HTREE_OK) {
@@ -1855,7 +1721,7 @@ static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 
 /* Grow the explicit SM border (grow-only) to cover the tree content
    including the reconstructed edge geometry */
-static int htree_grow_sm_border(HTree* tree)
+int htree_grow_sm_border(HTree* tree)
 {
 	if (!(tree->nodes && !tree->nodes->next &&
 		  tree->nodes->type == htTree && tree->nodes->rect)) {
@@ -1902,19 +1768,24 @@ static int htree_grow_sm_border(HTree* tree)
 	return HTREE_OK;
 }
 
-int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm, int ordered)
+int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
+										const HTLayoutOptions* layout)
 {
 	int res;
 	HTCoordFormat node_coord_format, edge_coord_format, edge_pl_coord_format;
 	HTEdgeFormat edge_format;
+	HTLayoutOptions opts;
 
 	if (!doc || !doc->trees) {
 		return HTREE_BAD_PARAMETER;
 	}
+	if (layout) {
+		res = htree_layout_check_options(layout, &opts);
+		if (res != HTREE_OK) {
+			return res;
+		}
+	}
 
-	//DEBUG << "Reconstruct document geometry" << std::endl;
-	//htree_print_document(doc);
-	
 	node_coord_format = doc->node_coord_format;
 	edge_coord_format = doc->edge_coord_format;
 	edge_pl_coord_format = doc->edge_pl_coord_format;
@@ -1926,27 +1797,18 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm, int
 	}
 
 	for (HTree* tree = doc->trees; tree; tree = tree->next) {
-		if (ordered && tree->nodes) {
-			/* rank the nodes by their original reading position, then clean the
-			   geometry so the reconstruction places them in a fresh frame */
-			htree_assign_layout_ranks(tree->nodes);
-			htree_clean_tree_geometry(tree->nodes);
-		}
-		if (tree->nodes) {
-			res = htree_reconstruct_nodes_geometry(tree->nodes, tree->edges, reconstruct_sm, ordered);
+		if (layout) {
+			/* the full layout: the geometry is rebuilt from the structure */
+			res = htree_layout_tree(tree, reconstruct_sm, &opts);
 			if (res != HTREE_OK) {
 				return res;
 			}
+			continue;
 		}
-		if (ordered) {
-			/* drop the edge routes so they are rebuilt for the new node places
-			   (a comment link is not re-routed, so it ends with no target point) */
-			for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
-				if (edge->source_point) { htree_destroy_point(edge->source_point); edge->source_point = NULL; }
-				if (edge->target_point) { htree_destroy_point(edge->target_point); edge->target_point = NULL; }
-				if (edge->label_point) { htree_destroy_point(edge->label_point); edge->label_point = NULL; }
-				if (edge->label_rect) { htree_destroy_rect(edge->label_rect); edge->label_rect = NULL; }
-				if (edge->polyline) { htree_destroy_polyline(edge->polyline); edge->polyline = NULL; }
+		if (tree->nodes) {
+			res = htree_reconstruct_nodes_geometry(tree->nodes, tree->edges, reconstruct_sm);
+			if (res != HTREE_OK) {
+				return res;
 			}
 		}
 		res = htree_reconstruct_edges_geometry(tree->edges);

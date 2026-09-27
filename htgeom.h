@@ -33,8 +33,8 @@
 /* The version of the library itself */
 
 #define HTREE_GEOM_LIB_VERSION_MAJOR 1
-#define HTREE_GEOM_LIB_VERSION_MINOR 0
-#define HTREE_GEOM_LIB_VERSION_PATCH 6
+#define HTREE_GEOM_LIB_VERSION_MINOR 1
+#define HTREE_GEOM_LIB_VERSION_PATCH 0
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,6 +66,23 @@ typedef enum {
 	htComment = 16          /* a rect comment node, excluded from the border bounds */
 } HTNodeType;
 
+/* the layout role of a node: the source roles open the flow of their
+   container, the sink roles close it (see docs/reconstruction.md) */
+typedef enum {
+	htRoleNone = 0,
+	htRoleInitial,
+	htRoleFinal,
+	htRoleTerminate,
+	htRoleEntryPoint,
+	htRoleExitPoint,
+	htRoleShallowHistory,
+	htRoleDeepHistory,
+	htRoleChoice,
+	htRoleFork,
+	htRoleJoin,
+	htRoleSubmachine
+} HTNodeRole;
+
 typedef struct _HTreeNode {
     HTNodeType              type;
     char*                   id;
@@ -75,7 +92,8 @@ typedef struct _HTreeNode {
     struct _HTreeNode*      parent;
     struct _HTreeNode*      children;
     struct _HTreeNode*      next;
-    int                     layout_rank;   /* the reconstruction placement order */
+    HTNodeRole              role;          /* the layout role */
+    HTreeRect*              min_rect;      /* the preset minimum size (x, y ignored) */
 } HTreeNode;
 
 typedef struct _HTreeEdge {
@@ -124,6 +142,27 @@ typedef struct _HTDocument {
 	HTreeRect*              bounding_rect;         /* bounding rect */
 } HTDocument;
 
+/* the flow direction of the layered layout */
+typedef enum {
+	htFlowDown = 0,       /* the layers are rows, the flow runs down */
+	htFlowRight = 1       /* the layers are columns, the flow runs right */
+} HTFlowDirection;
+
+/* the layered layout options; a value <= 0 selects the library default */
+typedef struct {
+	HTFlowDirection         direction;    /* the root frame direction */
+	int                     alternate;    /* alternate the direction by the nesting depth */
+	double                  node_gap;     /* the gap between the neighbours in a layer */
+	double                  layer_gap;    /* the gap between the layers */
+	double                  padding;      /* the container padding */
+	int                     sweeps;       /* the crossing reduction sweeps limit */
+	double                  node_width;   /* the default state size */
+	double                  node_height;
+	double                  point_size;   /* the pseudostate glyph size */
+	double                  label_width;  /* the default transition label size */
+	double                  label_height;
+} HTLayoutOptions;
+
 /* -----------------------------------------------------------------------------
  * The hierarchical tree geometry functions
  * ----------------------------------------------------------------------------- */
@@ -167,6 +206,7 @@ typedef struct _HTDocument {
 	HTreeNode*              htree_new_node(HTNodeType node_type, const char* _id);
 	void                    htree_node_set_rect(HTreeNode* node, float x, float y, float w, float h);
 	void                    htree_node_set_point(HTreeNode* node, float x, float y);
+	void                    htree_node_set_min_size(HTreeNode* node, double w, double h);
 	void                    htree_add_sibling_node(HTreeNode* node, HTreeNode* new_node);
 	void                    htree_add_child_node(HTreeNode* node, HTreeNode* new_node);
 	HTreeNode*              htree_copy_node(const HTreeNode* src);
@@ -197,7 +237,9 @@ typedef struct _HTDocument {
 	int                     htree_print_document(const HTDocument* doc);
 	int                     htree_build_bounding_rect(HTDocument* doc, HTreeRect** result);
 	int                     htree_check_geometry(const HTDocument* doc);
-	int                     htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm, int ordered);
+	void                    htree_default_layout_options(HTLayoutOptions* opts);
+	int                     htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
+																const HTLayoutOptions* layout);
 	int                     htree_convert_document_geometry(HTDocument* doc,
 															HTCoordFormat new_node_coord_format,
 															HTCoordFormat new_edge_coord_format,

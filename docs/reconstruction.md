@@ -443,13 +443,16 @@ partners toward the centre, which shortens the border crossings (R1).
 The cross-axis positions come from the priority layout method with the
 1991 initialisation: a layer is packed from its start with the gap
 `NODE_GAP` between the neighbours, each vertex centred in its slot; the
-improvement passes run DOWN (layers 2..n), UP (n-1..1), DOWN (t..n) with
-t the middle layer; in a pass every vertex moves toward the metrical
+improvement passes run DOWN (layers 1..n), UP (n-1..1), DOWN (t..n) with
+t the middle layer; in a pass every vertex aims at the metrical
 barycentre of its neighbours in the fixed layer (the mean of their
-centres), by priority: the dummies first (their priority above every
-connectivity, so the long edges get straight), then the vertices by
-connectivity; a move keeps the layer order, keeps the gap, and pushes
-only the lower-priority neighbours by the least amount. The flow-axis
+centres) with the weight of its priority: the dummies above every
+connectivity (so the long edges get straight), the vertices by their
+connectivity, an unconnected vertex barely weighted at its place. The
+pass is the weighted least-squares form of the priority rule: the layer
+order and the gaps are kept by pooling the adjacent violators, so the
+neighbours of a pulled vertex move by the least amount and two siblings
+pulled to one point settle symmetrically around it. The flow-axis
 positions are bands: the band of a layer has the size of its largest
 vertex, the bands are separated by `LAYER_GAP`, and the label dummies
 enlarge the band of their layer like any vertex. A vertex is centred
@@ -466,10 +469,11 @@ axis, so the region borders align.
 
 The content rect of a container is the union of its children's rects
 and of its label dummies. The container rect is the content plus
-`PADDING` on every side plus the title block along the flow-axis start:
-the preset minimum rect of a composite gives the size of its name and
-actions block, and the content starts after it; without a preset the
-title block is `PADDING` high. The content is finally shifted so that
+`PADDING` on every side plus the title block at the top of the rect
+(the name and actions block is drawn there whatever the flow direction):
+the preset minimum rect of a composite gives the size of that block, and
+the content starts below it; without a preset the title block is
+`PADDING` high. The content is finally shifted so that
 the container's origin is (0, 0) in its frame (the rescale of the 1991
 method). A composite whose min rect is wider than the content is widened
 to it, the content centred. The explicit SM border, when present or
@@ -486,7 +490,8 @@ placed:
   as the fallback;
 * a transition with edge dummies is a polyline through the centres of
   its dummies, the ends attached to the borders as above from the first
-  and the last bend; the label dummy is a bend as well;
+  and the last bend; at a label dummy the line runs along the slot's
+  cross-axis start and the label rect fills the rest of the slot;
 * a self-loop is the side loop of 1.0.6 on the side facing away from the
   flow (the cross-axis end of the state, so it does not enter the
   routing lanes between the layers);
@@ -542,34 +547,47 @@ under a `NULL` layout:
         double          layer_gap;   /* LAYER_GAP */
         double          padding;     /* PADDING */
         int             sweeps;      /* LAYOUT_SWEEPS */
+        double          node_width;  /* the size defaults, so a caller can */
+        double          node_height; /* combine its own estimates with them */
+        double          point_size;
+        double          label_width;
+        double          label_height;
     } HTLayoutOptions;
 
     void htree_default_layout_options(HTLayoutOptions* opts);
+    void htree_node_set_min_size(HTreeNode* node, double w, double h);
     int  htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
                                              const HTLayoutOptions* layout);
 ```
 
+A value of zero or less in the options selects the library default.
 `HTreeEdge` keeps `label_rect`: when the caller presets it before the
-layout, its width and height size the label dummy; otherwise the label
-gets the default size. The regions are passed as `htRegion` nodes.
+layout, its width and height size the label dummy (a zero size means the
+default label size); without a preset the transition gets no label
+geometry. The regions are passed as `htRegion` nodes. The caller knows
+the texts, so it presets the sizes: the libcyberiadaml bridge estimates
+the state text blocks and the transition labels from the titles and the
+actions with fixed character metrics.
 
-The consumer side (follow-up work in the sibling repositories, listed
-here so the change is complete):
+## The Implementation
 
-* `libcyberiadaml/geometry.c` maps the node types to the roles (initial,
-  final, terminate, entry/exit points, histories, choice, fork, join,
-  submachine) and the regions to `htRegion`; the full reconstruction
-  cleans the geometry first and passes the layout options - the
-  "build before clean" ordering trick is dropped;
-* `cyberiada_reconstruct_document_geometry` gains an optional size
-  callback (a node or an edge label -> width, height) so that an editor
-  can supply the text block sizes it renders with; without it the
-  defaults apply;
-* `libcyberiadamlpp` and the Python binding pass the options and the
-  callback through;
-* the editor retires the closeness metric, its tool and its document,
-  and its polygon `reconstruct` mode reports the readability measures
-  of the criteria section instead.
+```
+    htgeom.h                    the roles, the options, min_rect
+       |
+    htgeom_internal.h           the helpers shared by the two sources
+       |                 |
+    htgeom.cpp           htgeom_layout.cpp
+    the fill-in,         the containers and the seeds, P2-P8 per
+    the attachment,      container, the routing, the comments,
+    the loop, the        htree_layout_tree
+    SM border
+```
+
+`htree_reconstruct_document_geometry` dispatches on the options pointer:
+`NULL` runs the preserving fill-in of `htgeom.cpp`, an options struct
+runs `htree_layout_tree` of `htgeom_layout.cpp` for every tree. The
+tests 25-35 (`tests/layout-check.h` holds the builders and the
+readability checks H1-H4) cover the cases of the testing section.
 
 ## Determinism and Complexity
 
@@ -588,22 +606,26 @@ its printed document compared with the recorded output), one per
 structural case, each asserting the measures of the criteria section
 on the result before printing it:
 
-* a chain (initial -> A -> B -> final): three layers, straight edges,
-  forward fraction 1;
-* a cycle (A -> B -> C -> A): one reversed edge, no crossing;
-* a diamond (A -> B, A -> C, B -> D, C -> D): no crossing, D centred;
-* a long edge (A -> D over three layers) with a label: a polyline with
-  bends at the dummies, the label rect in the tail layer;
-* a composite with two regions: the region bands aligned, the composite
-  content inside the title block and the padding;
-* a cross-level transition: one crossing per border, the lifted edge
-  ordered in the parent;
-* a self-loop: the loop outside the routing lanes;
-* the alternation: a composite inside the SM laid out `RIGHT`, its child
-  composite `DOWN`;
-* the preset sizes: a min rect never shrunk, a wide title block widening
-  its composite;
-* comments: beside the linked element, outside the SM border bounds.
+* 25 a chain (initial -> A -> B -> final): the flow order, straight
+  edges, forward fraction 1;
+* 26 a cycle (A -> B -> C -> A): one backward edge, no crossing;
+* 27 a diamond (A -> B, A -> C, B -> D, C -> D): no crossing, D centred;
+* 28 a long edge (A -> D over three layers) with a label: two bends,
+  the label rect in the tail layer beside the states;
+* 29 a composite with two regions: the region bands aligned, stacked
+  with the gap below the title block;
+* 30 a cross-level transition: one crossing per composite border, no
+  line-rect crossing;
+* 31 a self-loop: the loop on the cross-axis end, DOWN and RIGHT;
+* 32 the alternation: a composite inside the SM laid out `RIGHT`, its
+  child composite `DOWN`, the alternation off, the `RIGHT` root;
+* 33 the preset sizes: a min rect never shrunk, a wide title block
+  widening its composite, the content centred;
+* 34 comments: beside the linked element, the link unrouted, the
+  unlinked comment on the shelf;
+* 35 the degenerate documents: empty, points only, a single state, loops
+  only, cycles without roles, parallel edges, no root rect, a submachine
+  with its border points, a top-level list.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness
