@@ -1,19 +1,14 @@
 # libhtgeom project changelog
 
-## Version 1.1.0 (unreleased)
+## Version 1.1.0
 
 Added:
 - the layered layout of the full geometry reconstruction
-  (`docs/reconstruction.md`, `htgeom_layout.cpp`);
 - the node roles (`HTNodeRole`) and the preset minimum sizes (`min_rect`,
   `htree_node_set_min_size`);
 - the layout options (`HTLayoutOptions`, `htree_default_layout_options`);
-- the layout tests 25-35.
-
-Changed:
 - `htree_reconstruct_document_geometry` takes the layout options instead
   of the ordering flag (`NULL` keeps the preserving fill-in);
-- the reading-order placement and `layout_rank` are removed.
 
 ## Version 1.0.6
 
