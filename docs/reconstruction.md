@@ -238,15 +238,17 @@ The frame actually used is chosen by the content (the adaptive mode, the
 default): the layout is bottom-up, so a container cannot see its future
 slot, but it can be laid out in both frames and compared with the target
 shape of its depth - `aspect` (1.6) for a wide preference, `1/aspect` for
-a tall one. The frame whose rect ratio is closer to the target on the log
-scale wins, a tie takes the preferred frame. A long chain therefore
+a tall one. A frame whose rect lies on the target's side of the square
+(wide for a wide target) beats one on the other side; between two on the
+same side the ratio closer to the target on the log scale wins, and a
+tie takes the preferred frame. A long chain therefore
 becomes a row at the machine level and a column inside a composite, while
 a wide diamond inside a composite keeps the frame that makes it squarer.
 The composite chooses one frame for all its regions from their stacked
 extents. On top of that the start is decided by the result: the whole
 tree is laid out with both starts (wide, tall, wide ... and tall, wide,
-...) and the layout whose final machine shape is closer to the wide
-target stays. The caller may instead fix one direction everywhere or
+...) and the layout whose final machine shape is better - wide rather
+than tall, then closer to the target - stays. The caller may instead fix one direction everywhere or
 keep the plain alternation from a chosen start (`HTLayoutMode`).
 
 ```

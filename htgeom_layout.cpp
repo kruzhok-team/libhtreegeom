@@ -230,14 +230,33 @@ static double htree_layout_shape_distance(double w, double h, double target)
 	return std::fabs(std::log((w / h) / target));
 }
 
-/* the frame closer to the target, the preferred one on a tie */
+/* the box is on the target's side of the square: wide for a wide target */
+static int htree_layout_on_side(double w, double h, double target)
+{
+	int wide = w <= 0.0 || h <= 0.0 || w >= h;
+	return wide == (target >= 1.0);
+}
+
+/* the better of two shapes: the one on the target's side, among those the
+   closer ratio; 0 = the first, 1 = the second, -1 = a tie */
+static int htree_layout_shape_better(double w1, double h1, double w2, double h2, double target)
+{
+	int s1 = htree_layout_on_side(w1, h1, target), s2 = htree_layout_on_side(w2, h2, target);
+	double d1, d2;
+	if (s1 != s2) return s1 ? 0 : 1;
+	d1 = htree_layout_shape_distance(w1, h1, target);
+	d2 = htree_layout_shape_distance(w2, h2, target);
+	if (std::fabs(d1 - d2) < HTREE_COORD_EPS) return -1;
+	return d1 < d2 ? 0 : 1;
+}
+
+/* the frame with the better shape, the preferred one on a tie */
 static HTFlowDirection htree_layout_choose(double w_down, double h_down, double w_right, double h_right,
 										   double target, HTFlowDirection preferred)
 {
-	double d_down = htree_layout_shape_distance(w_down, h_down, target);
-	double d_right = htree_layout_shape_distance(w_right, h_right, target);
-	if (std::fabs(d_down - d_right) < HTREE_COORD_EPS) return preferred;
-	return d_down < d_right ? htFlowDown : htFlowRight;
+	int better = htree_layout_shape_better(w_down, h_down, w_right, h_right, target);
+	if (better < 0) return preferred;
+	return better == 0 ? htFlowDown : htFlowRight;
 }
 
 static HTreeNode* htree_layout_first_child(const HTLayoutContext* ctx, int ci)
@@ -1703,11 +1722,12 @@ static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayou
 }
 
 /* the adaptive mode tries both starts and keeps the layout whose machine
-   shape is closer to the wide target; the geometry of the winner stays */
+   shape is better (wide rather than tall, then closer to the target); the
+   geometry of the winner stays */
 int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts)
 {
-	double wr, hr, wd, hd, dr, dd;
-	int res;
+	double wr, hr, wd, hd;
+	int res, better;
 
 	if (!tree || !opts) {
 		return HTREE_BAD_PARAMETER;
@@ -1719,10 +1739,8 @@ int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* op
 	if (res != HTREE_OK) return res;
 	res = htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowDown, &wd, &hd);
 	if (res != HTREE_OK) return res;
-	dr = htree_layout_shape_distance(wr, hr, opts->aspect);
-	dd = htree_layout_shape_distance(wd, hd, opts->aspect);
-	if (dr < dd - HTREE_COORD_EPS ||
-		(std::fabs(dr - dd) <= HTREE_COORD_EPS && opts->direction == htFlowRight)) {
+	better = htree_layout_shape_better(wr, hr, wd, hd, opts->aspect);
+	if (better == 0 || (better < 0 && opts->direction == htFlowRight)) {
 		return htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowRight, &wr, &hr);
 	}
 	return HTREE_OK;
