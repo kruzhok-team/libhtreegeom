@@ -38,9 +38,12 @@ int  htree_project_edge_to_borders(HTreeEdge* edge);
 /* the side loop of a self-transition: on the right border, or on the bottom one */
 int  htree_reconstruct_edge_loop(HTreeEdge* edge, int bottom_side);
 int  htree_grow_sm_border(HTree* tree);
+int  htree_tree_bounding_rect(const HTree* tree, int skip_comments, HTreeRect** result);
 
 /* htgeom_layout.cpp: the layered layout of one tree (docs/reconstruction.md) */
 int  htree_layout_check_options(const HTLayoutOptions* in, HTLayoutOptions* out);
 int  htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts);
+/* the machines of a document in a row, in the document order */
+int  htree_layout_place_trees(HTDocument* doc, const HTLayoutOptions* opts);
 
 #endif

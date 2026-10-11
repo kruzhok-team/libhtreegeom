@@ -98,4 +98,6 @@ border). The allocating functions return NULL on failure.
   the authored parents and the SM border when the content overflows; with
   the layout options the full layered layout of `docs/reconstruction.md`
   (the geometry is rebuilt from the structure, the roles and the preset
-  sizes); `reconstruct_sm` allows creating the missing SM border rect
+  sizes); `reconstruct_sm` allows creating the missing SM border rect,
+  which a document with several machines creates anyway (the machines
+  are placed in a row)

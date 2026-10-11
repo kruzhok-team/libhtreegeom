@@ -463,6 +463,30 @@ static int htree_construct_bounding_rect(std::vector<h2d::Point2dD>& points,
 	return HTREE_OK;
 }
 
+/* The bounding rect of one tree: its nodes (the comments optional) and the
+   geometry of its resolved edges */
+int htree_tree_bounding_rect(const HTree* tree, int skip_comments, HTreeRect** result)
+{
+	std::vector<h2d::Point2dD> points;
+	std::vector<h2d::FRectD> rects;
+	int res;
+
+	if (!tree || !result) {
+		return HTREE_BAD_PARAMETER;
+	}
+	if (tree->nodes) {
+		res = htree_get_nodes_collections(tree->nodes, points, rects, skip_comments);
+		if (res != HTREE_OK) {
+			return res;
+		}
+	}
+	res = htree_get_edges_collections(tree->edges, points, rects, skip_comments);
+	if (res != HTREE_OK) {
+		return res;
+	}
+	return htree_construct_bounding_rect(points, rects, result);
+}
+
 int htree_build_bounding_rect(HTDocument* doc, HTreeRect** result)
 {
 	int res;
@@ -1795,8 +1819,16 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
 		/* the full layout rebuilds the geometry from the structure in the
 		   canonical form; the incoming geometry is not converted (the
 		   conversion drops the preset label sizes of the unplaced edges) */
+		int many = doc->trees->next != NULL;
 		for (HTree* tree = doc->trees; tree; tree = tree->next) {
-			res = htree_layout_tree(tree, reconstruct_sm, &opts);
+			/* a document with several machines draws every border */
+			res = htree_layout_tree(tree, reconstruct_sm || many, &opts);
+			if (res != HTREE_OK) {
+				return res;
+			}
+		}
+		if (many) {
+			res = htree_layout_place_trees(doc, &opts);
 			if (res != HTREE_OK) {
 				return res;
 			}

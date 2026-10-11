@@ -382,7 +382,10 @@ Sugiyama methods and in ELK:
     +----------------------------------------------------------------+
       |
       v  per tree
-    P9 edge routing, P10 comments, the SM border, the bounding rect
+    P9 edge routing, P10 comments, the SM border
+      |
+      v  several machines: every border drawn, the machines in a row
+    the bounding rect
       |
       v
     canonical form (absolute, border ends), to-format (the saved formats)
@@ -541,6 +544,18 @@ free side (the cross-axis end with no neighbour, else after the last
 layer), with the `NODE_GAP`; an unlinked comment is shelf-placed after
 the content of its container. Comments enlarge neither the containers
 nor the SM border (the 1.0.6 rule) and their links are not routed.
+
+### Several machines
+
+A document with several state machines draws every machine explicitly:
+the standard puts the children of a rect-less machine into the global
+document plane (7, `dGeometry`), so several rect-less machines would
+share the origin. The reconstruction therefore creates the border rect
+of every machine when the document holds more than one (the
+`reconstruct_sm` argument is implied), lays each machine out on its own
+by the rules above and places the machines in a row in the document
+order, two node gaps apart with their tops aligned; the comments of a
+machine travel with it.
 
 ## The Interface
 

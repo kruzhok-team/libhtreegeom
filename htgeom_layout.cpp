@@ -1745,3 +1745,47 @@ int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* op
 	}
 	return HTREE_OK;
 }
+
+/* -----------------------------------------------------------------------------
+ * Several machines: every tree laid out on its own, then placed in a row
+ * ----------------------------------------------------------------------------- */
+
+static void htree_shift_tree(HTree* tree, double dx, double dy)
+{
+	for (HTreeNode* n = tree->nodes; n; n = n->next) {
+		htree_shift_subtree(n, dx, dy);
+	}
+	for (HTreeEdge* e = tree->edges; e; e = e->next) {
+		htree_layout_shift_edge(e, dx, dy);
+		for (HTreePolyline* pl = e->polyline; pl; pl = pl->next) {
+			pl->point.x += dx;
+			pl->point.y += dy;
+		}
+	}
+}
+
+/* the machines side by side (wide rather than tall) in the document order,
+   two node gaps apart, their tops aligned; the comments travel with their
+   machine */
+int htree_layout_place_trees(HTDocument* doc, const HTLayoutOptions* opts)
+{
+	double cursor = 0.0;
+
+	if (!doc || !opts) {
+		return HTREE_BAD_PARAMETER;
+	}
+	for (HTree* tree = doc->trees; tree; tree = tree->next) {
+		HTreeRect* bounds = NULL;
+		int res = htree_tree_bounding_rect(tree, 0, &bounds);
+		if (res != HTREE_OK) {
+			return res;
+		}
+		if (!bounds) {
+			continue;
+		}
+		htree_shift_tree(tree, cursor - bounds->x, -bounds->y);
+		cursor += bounds->width + 2 * opts->node_gap;
+		htree_destroy_rect(bounds);
+	}
+	return HTREE_OK;
+}
