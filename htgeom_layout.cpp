@@ -1345,6 +1345,22 @@ static void htree_layout_content_bounds(const HTLayoutContext* ctx, int ci, HTre
 static void htree_layout_node_centre(const HTreeNode* n, HTreePoint* p);
 static void htree_layout_origin(const HTLayoutContext* ctx, int ci, double* ox, double* oy);
 
+/* the update: a region of the composite is drawn - seeded itself or holding
+   a seeded vertex */
+static int htree_layout_regions_drawn(const HTLayoutContext* ctx, int ci)
+{
+	const HTLayoutContainer& c = ctx->containers[ci];
+	if (!ctx->update || c.kind != htContainerRegions) return 0;
+	for (HTreeNode* r = c.node->children; r; r = r->next) {
+		if (r->type != htRegion) continue;
+		if (htree_layout_seeded(ctx, r, NULL)) return 1;
+		for (HTreeNode* v = r->children; v; v = v->next) {
+			if (htree_layout_is_vertex(v) && htree_layout_seeded(ctx, v, NULL)) return 1;
+		}
+	}
+	return 0;
+}
+
 /* P7: the regions laid out in the composite's frame, side by side across
    the flow axis, widened to the widest */
 static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w, double* content_h)
@@ -1369,7 +1385,7 @@ static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w,
 		res = htree_layout_container_forced(ctx, it->second, dir);
 		if (res != HTREE_OK) return res;
 	}
-	if (ctx->update) {
+	if (htree_layout_regions_drawn(ctx, ci)) {
 		/* the drawn regions keep their rects; a new region goes after them */
 		HTreeRect u;
 		int any = 0;
@@ -1500,8 +1516,9 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 		   else it starts inside the drawn rect; the rect only grows */
 		const HTLayoutContainer& c = ctx->containers[ci];
 		HTreeRect bounds;
+		double fit_iy = iy;
 		int anchored = 0;
-		if (c.kind == htContainerRegions) {
+		if (htree_layout_regions_drawn(ctx, ci)) {
 			anchored = 1;
 			ix = iy = 0.0;
 		}
@@ -1539,12 +1556,20 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 					node->rect->width = rx2 - node->rect->x;
 					node->rect->height = ry2 - node->rect->y;
 				}
+			} else if (!anchored) {
+				/* nothing drawn inside: the rect of the full layout, the
+				   content already sits at its insets */
+				node->rect = htree_new_rect();
+				node->rect->x = node->rect->y = 0.0;
+				node->rect->width = W;
+				node->rect->height = H;
 			} else {
+				/* a new rect around the drawn content keeps the title band */
 				node->rect = htree_new_rect();
 				node->rect->x = bounds.x - ctx->opts.padding;
-				node->rect->y = bounds.y - ctx->opts.padding;
+				node->rect->y = bounds.y - fit_iy;
 				node->rect->width = bounds.width + 2 * ctx->opts.padding;
-				node->rect->height = bounds.height + 2 * ctx->opts.padding;
+				node->rect->height = bounds.height + fit_iy + ctx->opts.padding;
 				if (node->rect->width < W) node->rect->width = W;
 				if (node->rect->height < H) node->rect->height = H;
 			}

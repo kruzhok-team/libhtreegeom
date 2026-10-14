@@ -9,6 +9,8 @@ Added:
 Fixed:
 - the update: the bends and the labels of the new transitions inside a
   drawn container are no longer shifted twice by its origin.
+- the update: a new container and a new region get the title band and the
+  insets of the full layout.
 
 ## Version 1.1.1 (unreleased)
 
