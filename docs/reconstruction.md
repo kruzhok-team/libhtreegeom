@@ -527,7 +527,9 @@ placed:
   then from the border of the lifted target vertex to the target, one
   crossing per border on the nesting path (H4); the border crossing of
   an entry or exit point is the point itself, which is placed on the
-  parent's border at the `ENTRY` / `EXIT` end of the parent's frame;
+  parent's border at the `ENTRY` / `EXIT` end of the parent's frame; the
+  points of a machine itself are its vertices with the source and sink
+  roles;
 * a reversed edge is routed on its reversed geometry with the end
   points swapped back;
 * the straight transitions between one pair of states (in either
@@ -566,41 +568,50 @@ added without geometry is completed, not redrawn.
 ```
     existing geometry (the seed)                 geometry-less elements
          |                                            |
-    P2 a transition running backward along the      joined by the DFS
-       container's flow axis is the back edge
+    P2 the drawn bands form one chain searched      joined by the DFS; a new
+       first: the drawn order is never reversed      edge back into the chain
+                                                     is the back edge
     P3 the layer of a drawn state = its band on      longest path from its
        the flow axis (the bands are lower bounds)    neighbours' layers
     P5 the order of a layer = the drawn cross        inserted by barycentre,
        coordinates, kept among the drawn states      the sweeps move only them
-    P6 a drawn state aims at its own place above     aims at the barycentre
-       every pull, the drawn gaps are kept
-    P8 a container keeps its rect and grows when the content needs it
-    P9 a transition is re-routed when it is new or an end moved;
-       the others keep their geometry
+    P6 a drawn state is pinned: a pooled block       aims at the barycentre,
+       with drawn states takes their place           yields to the drawn
+    P8 a container keeps its rect and grows when     a new container gets the
+       the content needs it                          rect and the title band
+                                                     of the full layout
+    P9 a transition is re-routed when it is new or an end moved; a bend in
+       a drawn band runs along the whole band; the others keep their geometry
 ```
 
 The rules: the flow direction of a drawn container is inferred from its
 transitions between two drawn children (right-running against
 down-running, the regions follow their composite), a container without
 such transitions takes the preferred frame of its depth from the
-inferred root, and no frame is chosen by the content; a transition
-between two drawn elements takes no part in the layout (it keeps its
-drawn geometry) - only the transitions with a geometry-less end shape
-the layers and the order; the drawn roles are not pinned; a new band
+inferred root, and no frame is chosen by the content; a drawn
+transition between two drawn elements takes no part in the layout (it
+keeps its drawn geometry), a new one takes part unless both ends share a
+band (it keeps a straight line, which would otherwise push a drawn state
+out of its band); the drawn roles are not pinned; a new band
 takes the room of its tallest vertex and shifts the later drawn bands as
 a whole by the least amount, so the drawn spacing survives; the drawn
-regions, comments and border points keep their rects and points; a
+regions, comments and border points keep their rects and points, a new
+region goes after the drawn ones, the regions of a composite with no
+drawn region are laid out as in the full layout; a
 container grows around its content by the padding and keeps its drawn
 corner, so its parent anchors the new centre; a document with several
 machines keeps the drawn ones in place and puts the new ones after their
 extent.
 
 The guarantees: on a fully drawn document the update changes nothing;
-the layer and the order of every drawn state are kept; containers never
-shrink or move on their own; the flow direction of a drawn container is
-never flipped. Test 39 covers the splice, the append, a new transition
-only, a drawn composite with a new child, a drawn column, the idempotence
-and a drawn machine beside a new one.
+the layer, the order and the place of every drawn state are kept; a new
+cycle never reverses the drawn order; containers never shrink or move on
+their own; the flow direction of a drawn container is never flipped.
+Test 39 covers the splice, the append, a new transition only, a drawn
+composite with a new child, a drawn column, the idempotence and a drawn
+machine beside a new one; tests 40-43 cover the edge pieces in a drawn
+container, the title band of a new container, the pinned drawn states
+with the lines along the drawn bands, and the new cycles.
 
 ## The Interface
 
@@ -719,7 +730,10 @@ on the result before printing it:
 * 36 the adaptive direction: the machine-level chain runs right with and
   without the border and as a top-level list, a chain inside a composite
   makes the two starts compete, a single state takes the preferred frame,
-  a wide diamond takes the squarer one, the fixed mode, the option checks.
+  a wide diamond takes the squarer one, the fixed mode, the option checks;
+* 39-43 the update (see The update);
+* 44 the entry and exit points of a machine in the full layout and in the
+  update.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness
