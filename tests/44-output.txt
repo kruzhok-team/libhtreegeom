@@ -1,0 +1,6 @@
+=== full ===
+reconstruct: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: 0, y: 0, w: 480, h: 230), children: [HTreeNode {id: in, point: (x: 20, y: 120), role: 4}, HTreeNode {id: a, rect: (x: 90, y: 20, w: 300, h: 200)}, HTreeNode {id: out, point: (x: 460, y: 120), role: 5}]}], edges: [HTreeEdge {id: e-in-a, source: in, target: a, source point: (x: 20, y: 120), target point: (x: 90, y: 120)}, HTreeEdge {id: e-a-out, source: a, target: out, source point: (x: 390, y: 120), target point: (x: 460, y: 120)}]}], bounding rect: (x: 0, y: 0, w: 480, h: 230)}
+=== update ===
+update: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: -30, y: 0, w: 780, h: 300), children: [HTreeNode {id: a, rect: (x: 50, y: 50, w: 300, h: 200)}, HTreeNode {id: b, rect: (x: 400, y: 50, w: 300, h: 200)}, HTreeNode {id: in, point: (x: -20, y: 150), role: 4}]}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 350, y: 150), target point: (x: 400, y: 150)}, HTreeEdge {id: e-in-a, source: in, target: a, source point: (x: -20, y: 150), target point: (x: 50, y: 150)}]}], bounding rect: (x: -30, y: 0, w: 780, h: 300)}

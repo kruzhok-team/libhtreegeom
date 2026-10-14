@@ -17,6 +17,8 @@ Fixed:
 - the update: a new state that closes a cycle through the drawing is placed
   after it, the new edge back is the reversed one; a new transition between
   drawn states of different bands is routed around the states between them.
+- the entry and exit points of a machine (not of a nested state) are laid
+  out as vertices of the machine; they had no geometry.
 
 ## Version 1.1.1 (unreleased)
 

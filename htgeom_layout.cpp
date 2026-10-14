@@ -195,9 +195,12 @@ static int htree_layout_sink_role(HTNodeRole r)
 	return r == htRoleFinal || r == htRoleTerminate || r == htRoleExitPoint;
 }
 
+/* an entry / exit point on the border of a nested container; the points of
+   a machine are its vertices, laid out like the initial and the finals */
 static int htree_layout_is_border_point(const HTreeNode* n)
 {
-	return n && n->type == htPoint && (n->role == htRoleEntryPoint || n->role == htRoleExitPoint);
+	return n && n->type == htPoint && (n->role == htRoleEntryPoint || n->role == htRoleExitPoint) &&
+		n->parent && n->parent->type != htTree;
 }
 
 /* a child that takes part in the layout graph of its container */
