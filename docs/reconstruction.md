@@ -595,8 +595,9 @@ band (it keeps a straight line, which would otherwise push a drawn state
 out of its band); the drawn roles are not pinned; a new band
 takes the room of its tallest vertex and shifts the later drawn bands as
 a whole by the least amount, so the drawn spacing survives; the drawn
-regions, comments and border points keep their rects and points, a new
-region goes after the drawn ones, the regions of a composite with no
+regions, comments and border points keep their rects and points (a region
+is drawn when it has a rect or a drawn vertex), a new region goes after the
+drawn ones, the regions of a composite with no
 drawn region are laid out as in the full layout; a
 container grows around its content by the padding and keeps its drawn
 corner, so its parent anchors the new centre; a document with several
@@ -611,7 +612,8 @@ Test 39 covers the splice, the append, a new transition only, a drawn
 composite with a new child, a drawn column, the idempotence and a drawn
 machine beside a new one; tests 40-43 cover the edge pieces in a drawn
 container, the title band of a new container, the pinned drawn states
-with the lines along the drawn bands, and the new cycles.
+with the lines along the drawn bands, and the new cycles; test 45 the
+implicit region of a drawn composite.
 
 ## The Interface
 
@@ -731,7 +733,7 @@ on the result before printing it:
   without the border and as a top-level list, a chain inside a composite
   makes the two starts compete, a single state takes the preferred frame,
   a wide diamond takes the squarer one, the fixed mode, the option checks;
-* 39-43 the update (see The update);
+* 39-43, 45 the update (see The update);
 * 44 the entry and exit points of a machine in the full layout and in the
   update.
 

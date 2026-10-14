@@ -19,6 +19,9 @@ Fixed:
   drawn states of different bands is routed around the states between them.
 - the entry and exit points of a machine (not of a nested state) are laid
   out as vertices of the machine; they had no geometry.
+- the update: a region without a rect whose vertices are drawn (the
+  implicit region of a drawn composite) keeps its place; it was moved like a
+  new region, and the drawing of a composite with it moved.
 
 ## Version 1.1.1 (unreleased)
 

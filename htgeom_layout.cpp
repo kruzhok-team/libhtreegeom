@@ -1438,18 +1438,35 @@ static void htree_layout_origin(const HTLayoutContext* ctx, int ci, double* ox, 
 
 /* the update: a region of the composite is drawn - seeded itself or holding
    a seeded vertex */
+static int htree_layout_region_drawn(const HTLayoutContext* ctx, const HTreeNode* r)
+{
+	if (htree_layout_seeded(ctx, r, NULL)) return 1;
+	for (HTreeNode* v = r->children; v; v = v->next) {
+		if (htree_layout_is_vertex(v) && htree_layout_seeded(ctx, v, NULL)) return 1;
+	}
+	return 0;
+}
+
 static int htree_layout_regions_drawn(const HTLayoutContext* ctx, int ci)
 {
 	const HTLayoutContainer& c = ctx->containers[ci];
 	if (!ctx->update || c.kind != htContainerRegions) return 0;
 	for (HTreeNode* r = c.node->children; r; r = r->next) {
-		if (r->type != htRegion) continue;
-		if (htree_layout_seeded(ctx, r, NULL)) return 1;
-		for (HTreeNode* v = r->children; v; v = v->next) {
-			if (htree_layout_is_vertex(v) && htree_layout_seeded(ctx, v, NULL)) return 1;
-		}
+		if (r->type == htRegion && htree_layout_region_drawn(ctx, r)) return 1;
 	}
 	return 0;
+}
+
+static void htree_layout_union(HTreeRect* u, const HTreeRect* r, int* any)
+{
+	double x2, y2;
+	if (!*any) { *u = *r; *any = 1; return; }
+	x2 = u->x + u->width > r->x + r->width ? u->x + u->width : r->x + r->width;
+	y2 = u->y + u->height > r->y + r->height ? u->y + u->height : r->y + r->height;
+	if (r->x < u->x) u->x = r->x;
+	if (r->y < u->y) u->y = r->y;
+	u->width = x2 - u->x;
+	u->height = y2 - u->y;
 }
 
 /* P7: the regions laid out in the composite's frame, side by side across
@@ -1477,23 +1494,22 @@ static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w,
 		if (res != HTREE_OK) return res;
 	}
 	if (htree_layout_regions_drawn(ctx, ci)) {
-		/* the drawn regions keep their rects; a new region goes after them */
+		/* the drawn regions - drawn themselves or holding drawn vertices, an
+		   implicit region of a drawn composite too - keep their places; a
+		   new region goes after them */
 		HTreeRect u;
 		int any = 0;
 		htree_init_rect(&u);
 		for (HTreeNode* r = c.node->children; r; r = r->next) {
-			if (r->type != htRegion || !r->rect) continue;
-			if (!htree_layout_seeded(ctx, r, NULL)) {
-				if (dir == htFlowDown) htree_shift_subtree(r, u.x + u.width + ctx->opts.node_gap - r->rect->x, u.y - r->rect->y);
-				else htree_shift_subtree(r, u.x - r->rect->x, u.y + u.height + ctx->opts.node_gap - r->rect->y);
+			if (r->type == htRegion && r->rect && htree_layout_region_drawn(ctx, r)) {
+				htree_layout_union(&u, r->rect, &any);
 			}
-			if (!any) { u = *r->rect; any = 1; continue; }
-			double x2 = u.x + u.width > r->rect->x + r->rect->width ? u.x + u.width : r->rect->x + r->rect->width;
-			double y2 = u.y + u.height > r->rect->y + r->rect->height ? u.y + u.height : r->rect->y + r->rect->height;
-			if (r->rect->x < u.x) u.x = r->rect->x;
-			if (r->rect->y < u.y) u.y = r->rect->y;
-			u.width = x2 - u.x;
-			u.height = y2 - u.y;
+		}
+		for (HTreeNode* r = c.node->children; r; r = r->next) {
+			if (r->type != htRegion || !r->rect || htree_layout_region_drawn(ctx, r)) continue;
+			if (dir == htFlowDown) htree_shift_subtree(r, u.x + u.width + ctx->opts.node_gap - r->rect->x, u.y - r->rect->y);
+			else htree_shift_subtree(r, u.x - r->rect->x, u.y + u.height + ctx->opts.node_gap - r->rect->y);
+			htree_layout_union(&u, r->rect, &any);
 		}
 		*content_w = u.width;
 		*content_h = u.height;
