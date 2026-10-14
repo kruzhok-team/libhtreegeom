@@ -125,6 +125,8 @@ typedef struct {
 	std::vector<std::vector<int> >  layers;     /* 0 = ENTRY .. last + 1 = EXIT */
 	std::vector<std::vector<int> >  up, down;   /* the neighbours in the adjacent layers */
 	int                             entry, exit, last;
+	std::vector<double>             band_lo, band_hi; /* the update: the flow extent of a drawn layer */
+	std::vector<int>                band_drawn;
 } HTLayoutGraph;
 
 typedef enum {
@@ -981,6 +983,13 @@ static void htree_layout_centre_virtual(HTLayoutGraph* g)
 	g->vertices[g->exit].cross = (lo + hi) / 2.0;
 }
 
+static double htree_layout_block_mean(const std::vector<double>& sum, const std::vector<double>& w,
+									  const std::vector<double>& dsum, const std::vector<size_t>& dn,
+									  size_t k)
+{
+	return dn[k] > 0 ? dsum[k] / (double)dn[k] : sum[k] / w[k];
+}
+
 /* the priority pass of a layer as the weighted least-squares placement:
    every vertex aims at the mean position of its neighbours in the fixed
    layer with the weight of its priority (the dummies above every
@@ -991,8 +1000,8 @@ static void htree_layout_priority_pass(HTLayoutGraph* g, const HTLayoutOptions* 
 	std::vector<int>& L = g->layers[l];
 	size_t n = L.size();
 	std::vector<double> off(n, 0.0), d(n, 0.0), w(n, 0.0);
-	std::vector<double> bsum, bw;
-	std::vector<size_t> bstart;
+	std::vector<double> bsum, bw, bdsum;
+	std::vector<size_t> bstart, bdn;
 	double top = (double)g->vertices.size() + 1.0;
 
 	if (n == 0) return;
@@ -1019,22 +1028,32 @@ static void htree_layout_priority_pass(HTLayoutGraph* g, const HTLayoutOptions* 
 		}
 		d[i] -= off[i];
 	}
+	/* a block holding drawn vertices takes their mean: the drawn vertices
+	   stay pinned, the free ones yield (a weight alone still moves them) */
 	for (size_t i = 0; i < n; i++) {
+		int drawn = g->update && g->vertices[L[i]].seed;
 		bsum.push_back(w[i] * d[i]);
 		bw.push_back(w[i]);
+		bdsum.push_back(drawn ? d[i] : 0.0);
+		bdn.push_back(drawn ? 1 : 0);
 		bstart.push_back(i);
 		while (bsum.size() > 1 &&
-			   bsum.back() / bw.back() < bsum[bsum.size() - 2] / bw[bw.size() - 2]) {
+			   htree_layout_block_mean(bsum, bw, bdsum, bdn, bsum.size() - 1) <
+			   htree_layout_block_mean(bsum, bw, bdsum, bdn, bsum.size() - 2)) {
 			bsum[bsum.size() - 2] += bsum.back();
 			bw[bw.size() - 2] += bw.back();
+			bdsum[bdsum.size() - 2] += bdsum.back();
+			bdn[bdn.size() - 2] += bdn.back();
 			bsum.pop_back();
 			bw.pop_back();
+			bdsum.pop_back();
+			bdn.pop_back();
 			bstart.pop_back();
 		}
 	}
 	for (size_t k = 0; k < bstart.size(); k++) {
 		size_t end = k + 1 < bstart.size() ? bstart[k + 1] : n;
-		double m = bsum[k] / bw[k];
+		double m = htree_layout_block_mean(bsum, bw, bdsum, bdn, k);
 		for (size_t i = bstart[k]; i < end; i++) g->vertices[L[i]].cross = m + off[i];
 	}
 }
@@ -1055,6 +1074,9 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 		   of its tallest vertex */
 		double cursor = 0.0, shift = 0.0;
 		int any = 0, after_new = 0;
+		g->band_lo.assign(g->last + 2, 0.0);
+		g->band_hi.assign(g->last + 2, 0.0);
+		g->band_drawn.assign(g->last + 2, 0);
 		for (int l = 1; l <= g->last; l++) {
 			const std::vector<int>& L = g->layers[l];
 			double lo = 0.0, hi = 0.0, tall = 0.0;
@@ -1080,6 +1102,9 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 					HTLayoutVertex& vx = g->vertices[L[i]];
 					vx.flow = vx.seed ? vx.seed_flow + shift : (lo + hi) / 2.0;
 				}
+				g->band_lo[l] = lo;
+				g->band_hi[l] = hi;
+				g->band_drawn[l] = 1;
 				cursor = hi;
 				after_new = 0;
 			} else {
@@ -1127,6 +1152,10 @@ static void htree_layout_normalise(HTLayoutGraph* g, double* flow_extent, double
 		g->vertices[v].flow -= f0;
 		g->vertices[v].cross -= c0;
 	}
+	for (size_t l = 0; l < g->band_drawn.size(); l++) {
+		g->band_lo[l] -= f0;
+		g->band_hi[l] -= f0;
+	}
 	*flow_extent = any ? f1 - f0 : 0.0;
 	*cross_extent = any ? c1 - c0 : 0.0;
 }
@@ -1172,6 +1201,15 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 				}
 				piece.label.width = e.label_w;
 				piece.label.height = e.label_h;
+			}
+			if (d.layer < (int)g->band_drawn.size() && g->band_drawn[d.layer]) {
+				/* the update: in a drawn band the line runs along the whole
+				   band, so its ends clear the drawn neighbours */
+				htree_layout_to_doc(g->direction, g->band_lo[d.layer], d.cross, &p.x, &p.y);
+				piece.bends.push_back(p);
+				htree_layout_to_doc(g->direction, g->band_hi[d.layer], d.cross, &p.x, &p.y);
+				piece.bends.push_back(p);
+				continue;
 			}
 			htree_layout_to_doc(g->direction, d.flow, d.cross, &p.x, &p.y);
 			piece.bends.push_back(p);

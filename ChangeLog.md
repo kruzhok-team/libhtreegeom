@@ -11,6 +11,9 @@ Fixed:
   drawn container are no longer shifted twice by its origin.
 - the update: a new container and a new region get the title band and the
   insets of the full layout.
+- the update: the drawn vertices stay pinned when new vertices or bends
+  share their layer, and a new line through a drawn layer runs along the
+  whole band instead of cutting the corner of a drawn neighbour.
 
 ## Version 1.1.1 (unreleased)
 
