@@ -114,6 +114,7 @@ typedef struct {
 	int                 reversed;
 	int                 has_label;
 	double              label_w, label_h;
+	int                 drawn_ends;       /* the update: a new edge between two drawn vertices */
 	std::vector<int>    chain;            /* source, dummies, target by layer */
 } HTLayoutEdge;
 
@@ -511,17 +512,22 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 	for (size_t k = 0; k < c.seeds.size(); k++) {
 		const HTLayoutSeed& s = c.seeds[k];
 		HTLayoutEdge e;
+		int drawn_ends;
 		if (s.self_loop) continue;
-		if (ctx->update && (s.source_child < 0 || g->vertices[s.source_child + 1].seed) &&
-			(s.target_child < 0 || g->vertices[s.target_child + 1].seed)) {
-			/* a transition between drawn elements keeps its drawn geometry
-			   and takes no part in the seeded layout */
+		drawn_ends = ctx->update && (s.source_child < 0 || g->vertices[s.source_child + 1].seed) &&
+			(s.target_child < 0 || g->vertices[s.target_child + 1].seed);
+		if (drawn_ends && (s.source_child < 0 || s.target_child < 0 ||
+						   ctx->edge_seeds.find(s.edge) != ctx->edge_seeds.end())) {
+			/* a drawn transition between drawn elements keeps its geometry
+			   and takes no part in the seeded layout; a new one is laid out
+			   unless both ends share a band (see htree_layout_graph_prepare) */
 			continue;
 		}
 		e.source = s.source_child < 0 ? g->entry : s.source_child + 1;
 		e.target = s.target_child < 0 ? g->exit : s.target_child + 1;
 		e.edge = s.edge;
 		e.reversed = 0;
+		e.drawn_ends = drawn_ends;
 		e.has_label = s.has_label;
 		e.label_w = e.label_h = 0.0;
 		if (s.has_label) {
@@ -541,12 +547,16 @@ static void htree_layout_reverse_edge(HTLayoutEdge& e)
 }
 
 /* P2: the role pre-pass and the depth-first search in the model order;
-   the back edges are reversed. Returns the topological order */
+   the back edges are reversed. Returns the topological order. In the
+   update the drawn vertices of a band form one search node and the bands
+   are chained in the drawn order, band 1 searched first: a new edge that
+   re-enters the drawn flow at or before its own band is the back edge, so
+   a new cycle never reverses the drawing */
 static void htree_layout_break_cycles(HTLayoutGraph* g, std::vector<int>& topo)
 {
 	size_t n = g->vertices.size();
-	std::vector<std::vector<int> > out(n);
-	std::vector<int> colour(n, 0), indeg(n, 0), roots;
+	int bands = 0;
+	std::vector<int> node_of(n), roots;
 	std::vector<std::pair<int, size_t> > stack;
 
 	for (size_t k = 0; k < g->edges.size(); k++) {
@@ -564,13 +574,27 @@ static void htree_layout_break_cycles(HTLayoutGraph* g, std::vector<int>& topo)
 			htree_layout_reverse_edge(e);
 		}
 	}
-	for (size_t k = 0; k < g->edges.size(); k++) {
-		out[g->edges[k].source].push_back((int)k);
-		indeg[g->edges[k].target]++;
+	for (size_t v = 0; v < n; v++) {
+		const HTLayoutVertex& vx = g->vertices[v];
+		node_of[v] = (int)v;
+		if (g->update && vx.seed && vx.seed_layer > 0) {
+			node_of[v] = (int)n + vx.seed_layer - 1;
+			if (vx.seed_layer > bands) bands = vx.seed_layer;
+		}
 	}
-	for (size_t v = 0; v < n; v++) if (htree_layout_source_role(g->vertices[v].role)) roots.push_back((int)v);
-	for (size_t v = 0; v < n; v++) if (indeg[v] == 0) roots.push_back((int)v);
-	for (size_t v = 0; v < n; v++) roots.push_back((int)v);
+	size_t N = n + (size_t)bands;
+	std::vector<std::vector<int> > out(N), members(N);
+	std::vector<int> colour(N, 0), indeg(N, 0);
+	for (int b = 0; b + 1 < bands; b++) out[n + b].push_back(-1);   /* the chain to the next band */
+	for (size_t v = 0; v < n; v++) if (node_of[v] != (int)v) members[node_of[v]].push_back((int)v);
+	for (size_t k = 0; k < g->edges.size(); k++) {
+		out[node_of[g->edges[k].source]].push_back((int)k);
+		indeg[node_of[g->edges[k].target]]++;
+	}
+	if (bands > 0) roots.push_back((int)n);
+	for (size_t v = 0; v < n; v++) if (htree_layout_source_role(g->vertices[v].role)) roots.push_back(node_of[v]);
+	for (size_t v = 0; v < n; v++) if (indeg[node_of[v]] == 0) roots.push_back(node_of[v]);
+	for (size_t v = 0; v < N; v++) roots.push_back((int)v);
 
 	topo.clear();
 	for (size_t r = 0; r < roots.size(); r++) {
@@ -581,8 +605,18 @@ static void htree_layout_break_cycles(HTLayoutGraph* g, std::vector<int>& topo)
 			int v = stack.back().first;
 			size_t& i = stack.back().second;
 			if (i < out[v].size()) {
-				HTLayoutEdge& e = g->edges[out[v][i++]];
-				int w = e.target;
+				int k = out[v][i++];
+				int w;
+				if (k < 0) {
+					w = v + 1;
+					if (colour[w] == 0) {
+						colour[w] = 1;
+						stack.push_back(std::make_pair(w, (size_t)0));
+					}
+					continue;
+				}
+				HTLayoutEdge& e = g->edges[k];
+				w = node_of[e.target];
 				if (colour[w] == 0) {
 					colour[w] = 1;
 					stack.push_back(std::make_pair(w, (size_t)0));
@@ -591,7 +625,11 @@ static void htree_layout_break_cycles(HTLayoutGraph* g, std::vector<int>& topo)
 				}
 			} else {
 				colour[v] = 2;
-				topo.push_back(v);
+				if (v >= (int)n) {
+					for (size_t m = members[v].size(); m > 0; m--) topo.push_back(members[v][m - 1]);
+				} else {
+					topo.push_back(v);
+				}
 				stack.pop_back();
 			}
 		}
@@ -642,7 +680,7 @@ static void htree_layout_assign_layers(HTLayoutGraph* g, const std::vector<int>&
 			!(g->update && g->vertices[v].seed)) has_source = 1;
 	}
 	if (g->update) {
-		htree_layout_seed_bands(g);
+		/* the bands come from htree_layout_graph_prepare */
 		for (size_t v = 1; v + 1 < n; v++) if (g->vertices[v].seed_layer > bands) bands = g->vertices[v].seed_layer;
 	}
 	std::vector<int> band_layer(bands + 1);
@@ -1229,6 +1267,18 @@ static void htree_layout_graph_prepare(const HTLayoutContext* ctx, int ci, HTLay
 		if (!vx.seed) continue;
 		if (g->direction == htFlowDown) { vx.seed_flow = vx.seed_y; vx.seed_cross = vx.seed_x; }
 		else { vx.seed_flow = vx.seed_x; vx.seed_cross = vx.seed_y; }
+	}
+	if (g->update) {
+		/* the bands before the cycles: a new edge inside one band would
+		   push a drawn vertex out of it, so it keeps a straight line */
+		std::vector<HTLayoutEdge> kept;
+		htree_layout_seed_bands(g);
+		for (size_t k = 0; k < g->edges.size(); k++) {
+			const HTLayoutEdge& e = g->edges[k];
+			if (e.drawn_ends && g->vertices[e.source].seed_layer == g->vertices[e.target].seed_layer) continue;
+			kept.push_back(e);
+		}
+		g->edges.swap(kept);
 	}
 	htree_layout_break_cycles(g, topo);
 	htree_layout_assign_layers(g, topo);
