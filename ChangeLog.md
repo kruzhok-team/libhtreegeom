@@ -24,6 +24,9 @@ Fixed:
   new region, and the drawing of a composite with it moved.
 - the update: a new labelled transition between two drawn states takes no
   label layer, which pushed the drawn target; its label goes beside the line.
+- the update: a drawn transition whose ends moved by one offset (a drawn
+  group put into a new container) moves with them; it was re-routed as a
+  straight line.
 
 ## Version 1.1.1 (unreleased)
 

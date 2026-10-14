@@ -2022,17 +2022,27 @@ static void htree_layout_spread_pairs(HTLayoutContext* ctx)
 	}
 }
 
-/* the update: a drawn transition keeps its geometry when neither end moved */
-static int htree_layout_edge_kept(const HTLayoutContext* ctx, const HTreeEdge* e)
+/* the update: a drawn transition keeps its geometry when neither end moved;
+   when both moved by one offset (a drawn group put into a new container)
+   it moves with them */
+static int htree_layout_edge_kept(const HTLayoutContext* ctx, HTreeEdge* e)
 {
-	HTreePoint seed, now;
+	HTreePoint s0, s1, t0, t1;
+	double dx, dy;
 	if (!ctx->update || ctx->edge_seeds.find(e) == ctx->edge_seeds.end()) return 0;
-	htree_layout_node_centre(e->source, &now);
-	if (!htree_layout_seeded(ctx, e->source, &seed) ||
-		std::fabs(seed.x - now.x) > HTREE_COORD_EPS || std::fabs(seed.y - now.y) > HTREE_COORD_EPS) return 0;
-	htree_layout_node_centre(e->target, &now);
-	if (!htree_layout_seeded(ctx, e->target, &seed) ||
-		std::fabs(seed.x - now.x) > HTREE_COORD_EPS || std::fabs(seed.y - now.y) > HTREE_COORD_EPS) return 0;
+	if (!htree_layout_seeded(ctx, e->source, &s0) || !htree_layout_seeded(ctx, e->target, &t0)) return 0;
+	htree_layout_node_centre(e->source, &s1);
+	htree_layout_node_centre(e->target, &t1);
+	dx = s1.x - s0.x;
+	dy = s1.y - s0.y;
+	if (std::fabs(t1.x - t0.x - dx) > HTREE_COORD_EPS || std::fabs(t1.y - t0.y - dy) > HTREE_COORD_EPS) return 0;
+	if (std::fabs(dx) > HTREE_COORD_EPS || std::fabs(dy) > HTREE_COORD_EPS) {
+		htree_layout_shift_edge(e, dx, dy);
+		for (HTreePolyline* pl = e->polyline; pl; pl = pl->next) {
+			pl->point.x += dx;
+			pl->point.y += dy;
+		}
+	}
 	return 1;
 }
 
