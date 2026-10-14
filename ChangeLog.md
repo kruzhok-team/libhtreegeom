@@ -22,6 +22,8 @@ Fixed:
 - the update: a region without a rect whose vertices are drawn (the
   implicit region of a drawn composite) keeps its place; it was moved like a
   new region, and the drawing of a composite with it moved.
+- the update: a new labelled transition between two drawn states takes no
+  label layer, which pushed the drawn target; its label goes beside the line.
 
 ## Version 1.1.1 (unreleased)
 

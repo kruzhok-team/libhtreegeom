@@ -119,5 +119,18 @@ int main(void)
 	}
 	htree_destroy_document(doc);
 
+	/* a new labelled transition between two drawn neighbours */
+	doc = drawn_chain(&tree, &sm, &a, &b, &c);
+	{
+		HTreeEdge* ab = lc_edge(tree, "e-a-b-new", a, b, 80.0, 20.0);
+		printf("=== drawn labelled edge ===\n");
+		printf("update: %d\n", htree_update_document_geometry(doc, 0, &opts));
+		check_flow(tree, sm, a, b, c, "drawn labelled edge");
+		lc_check(ab->source_point && ab->target_point && ab->label_rect,
+				 "routed with its label", "drawn labelled edge");
+		htree_print_document(doc);
+	}
+	htree_destroy_document(doc);
+
 	return lc_failures ? 1 : 0;
 }

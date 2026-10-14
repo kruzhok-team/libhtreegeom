@@ -531,7 +531,9 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 		e.edge = s.edge;
 		e.reversed = 0;
 		e.drawn_ends = drawn_ends;
-		e.has_label = s.has_label;
+		/* a new edge between drawn vertices takes no label layer: the slot
+		   would push the drawn target band; its label goes beside the line */
+		e.has_label = s.has_label && !drawn_ends;
 		e.label_w = e.label_h = 0.0;
 		if (s.has_label) {
 			e.label_w = s.edge->label_rect->width > 0.0 ? s.edge->label_rect->width : o->label_width;
