@@ -27,6 +27,9 @@ Fixed:
 - the update: a drawn transition whose ends moved by one offset (a drawn
   group put into a new container) moves with them; it was re-routed as a
   straight line.
+- the update: a new state or a bend of a new transition sitting on a drawn
+  route that stays moves across the flow beyond it, away from the drawn
+  states of its layer; the route ran through the new state.
 
 ## Version 1.1.1 (unreleased)
 

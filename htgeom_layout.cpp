@@ -1175,6 +1175,145 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 	g->vertices[g->exit].flow = start > o->layer_gap ? start - o->layer_gap : 0.0;
 }
 
+/* the segment (x = flow, y = cross) meets the box */
+static int htree_layout_segment_in_box(HTreePoint p, HTreePoint q, double f0, double f1, double c0, double c1)
+{
+	double t0 = 0.0, t1 = 1.0;
+	double dp[4] = {p.x - q.x, q.x - p.x, p.y - q.y, q.y - p.y};
+	double dq[4] = {p.x - f0, f1 - p.x, p.y - c0, c1 - p.y};
+	for (int k = 0; k < 4; k++) {
+		double r;
+		if (std::fabs(dp[k]) < HTREE_COORD_EPS) {
+			if (dq[k] < 0.0) return 0;
+			continue;
+		}
+		r = dq[k] / dp[k];
+		if (dp[k] < 0.0) {
+			if (r > t1) return 0;
+			if (r > t0) t0 = r;
+		} else {
+			if (r < t0) return 0;
+			if (r < t1) t1 = r;
+		}
+	}
+	return 1;
+}
+
+/* the cross extent of the segment over the flow span */
+static void htree_layout_segment_cross(HTreePoint p, HTreePoint q, double f0, double f1, double* lo, double* hi)
+{
+	double ta = 0.0, tb = 1.0, a, b;
+	if (std::fabs(q.x - p.x) > HTREE_COORD_EPS) {
+		ta = (f0 - p.x) / (q.x - p.x);
+		tb = (f1 - p.x) / (q.x - p.x);
+		if (ta > tb) std::swap(ta, tb);
+		if (ta < 0.0) ta = 0.0;
+		if (tb > 1.0) tb = 1.0;
+	}
+	a = p.y + (q.y - p.y) * ta;
+	b = p.y + (q.y - p.y) * tb;
+	*lo = a < b ? a : b;
+	*hi = a < b ? b : a;
+}
+
+/* the update: the route in the frame of a drawn transition between two
+   drawn children that moved alike, so it stays */
+static int htree_layout_drawn_route(const HTLayoutContext* ctx, int ci, const HTLayoutGraph* g,
+									const HTreeEdge* e, std::vector<HTreePoint>* route)
+{
+	HTreePoint s0, t0, p;
+	double df, dc;
+	int sc, tc;
+	if (!e->source || !e->target || ctx->edge_seeds.find(e) == ctx->edge_seeds.end()) return 0;
+	sc = htree_layout_child_containing(ctx, ci, e->source);
+	tc = htree_layout_child_containing(ctx, ci, e->target);
+	if (sc < 0 || tc < 0 || sc == tc) return 0;
+	const HTLayoutVertex& sv = g->vertices[sc + 1];
+	const HTLayoutVertex& tv = g->vertices[tc + 1];
+	if (!sv.seed || !tv.seed) return 0;
+	df = sv.flow - sv.seed_flow;
+	dc = sv.cross - sv.seed_cross;
+	if (std::fabs(tv.flow - tv.seed_flow - df) > HTREE_COORD_EPS ||
+		std::fabs(tv.cross - tv.seed_cross - dc) > HTREE_COORD_EPS) return 0;
+	if (!htree_layout_seeded(ctx, e->source, &s0) || !htree_layout_seeded(ctx, e->target, &t0)) return 0;
+	route->clear();
+	route->push_back(e->source_point ? *e->source_point : s0);
+	for (const HTreePolyline* pl = e->polyline; pl; pl = pl->next) route->push_back(pl->point);
+	route->push_back(e->target_point ? *e->target_point : t0);
+	for (size_t i = 0; i < route->size(); i++) {
+		p = (*route)[i];
+		(*route)[i].x = (g->direction == htFlowDown ? p.y : p.x) + df;
+		(*route)[i].y = (g->direction == htFlowDown ? p.x : p.y) + dc;
+	}
+	return 1;
+}
+
+/* the update: a new vertex or a bend of a new edge sitting on a drawn route
+   that stays moves across the flow beyond it, away from the drawn vertices
+   of its layer; the vertices after it keep their gaps */
+static void htree_layout_clear_routes(const HTLayoutContext* ctx, int ci, HTLayoutGraph* g)
+{
+	const HTLayoutOptions* o = &ctx->opts;
+	std::vector<std::vector<HTreePoint> > routes;
+	std::vector<HTreePoint> route;
+
+	for (HTreeEdge* e = ctx->tree->edges; e; e = e->next) {
+		if (htree_layout_drawn_route(ctx, ci, g, e, &route)) routes.push_back(route);
+	}
+	if (routes.empty()) return;
+	for (int l = 1; l <= g->last; l++) {
+		std::vector<int>& L = g->layers[l];
+		for (size_t i = 0; i < L.size(); i++) {
+			HTLayoutVertex& v = g->vertices[L[i]];
+			int before = 0, after = 0, dir;
+			int band = v.kind != htVertexReal && l < (int)g->band_drawn.size() && g->band_drawn[l];
+			if (v.kind == htVertexVirtual || v.seed) continue;
+			for (size_t j = 0; j < L.size(); j++) {
+				if (!g->vertices[L[j]].seed) continue;
+				if (j < i) before = 1;
+				else after = 1;
+			}
+			if (before && after) continue;   /* between drawn neighbours: no room to move */
+			dir = after ? -1 : 1;
+			for (size_t pass = 0; pass <= routes.size(); pass++) {
+				/* a bend in a drawn band draws its line along the whole band */
+				double f0 = band ? g->band_lo[l] : v.flow - v.flow_size / 2.0;
+				double f1 = band ? g->band_hi[l] : v.flow + v.flow_size / 2.0;
+				double c0 = v.cross - v.before - o->padding, c1 = v.cross + v.after + o->padding;
+				double to = v.cross;
+				int hit = 0;
+				for (size_t r = 0; r < routes.size(); r++) {
+					for (size_t k = 0; k + 1 < routes[r].size(); k++) {
+						double lo, hi;
+						if (!htree_layout_segment_in_box(routes[r][k], routes[r][k + 1], f0, f1, c0, c1)) continue;
+						htree_layout_segment_cross(routes[r][k], routes[r][k + 1], f0, f1, &lo, &hi);
+						if (dir > 0 && hi + o->padding + v.before > to) to = hi + o->padding + v.before;
+						if (dir < 0 && lo - o->padding - v.after < to) to = lo - o->padding - v.after;
+						hit = 1;
+					}
+				}
+				if (!hit || std::fabs(to - v.cross) < HTREE_COORD_EPS) break;
+				v.cross = to;
+			}
+			if (dir > 0) {
+				for (size_t j = i + 1; j < L.size(); j++) {
+					const HTLayoutVertex& p = g->vertices[L[j - 1]];
+					HTLayoutVertex& q = g->vertices[L[j]];
+					double least = p.cross + p.after + htree_layout_gap(g, o, L[j - 1], L[j]) + q.before;
+					if (q.cross < least) q.cross = least;
+				}
+			} else {
+				for (size_t j = i; j-- > 0;) {
+					HTLayoutVertex& p = g->vertices[L[j]];
+					const HTLayoutVertex& q = g->vertices[L[j + 1]];
+					double most = q.cross - q.before - htree_layout_gap(g, o, L[j], L[j + 1]) - p.after;
+					if (p.cross > most) p.cross = most;
+				}
+			}
+		}
+	}
+}
+
 /* the content extent of the placed vertices in the frame, moved to the origin */
 static void htree_layout_normalise(HTLayoutGraph* g, double* flow_extent, double* cross_extent)
 {
@@ -1293,7 +1432,7 @@ static void htree_layout_graph_prepare(const HTLayoutContext* ctx, int ci, HTLay
 
 /* P6 in one frame: the vertex extents follow the direction, then the
    coordinates; the content extents come back in the document axes */
-static void htree_layout_graph_frame(const HTLayoutContext* ctx, const HTLayoutGraph* base,
+static void htree_layout_graph_frame(const HTLayoutContext* ctx, int ci, const HTLayoutGraph* base,
 									 HTFlowDirection dir, HTLayoutGraph* g, double* cw, double* ch)
 {
 	const HTLayoutOptions* o = &ctx->opts;
@@ -1322,6 +1461,7 @@ static void htree_layout_graph_frame(const HTLayoutContext* ctx, const HTLayoutG
 		}
 	}
 	htree_layout_assign_coordinates(g, o);
+	if (g->update) htree_layout_clear_routes(ctx, ci, g);
 	htree_layout_normalise(g, &flow_extent, &cross_extent);
 	if (dir == htFlowDown) { *cw = cross_extent; *ch = flow_extent; }
 	else { *cw = flow_extent; *ch = cross_extent; }
@@ -1341,13 +1481,13 @@ static int htree_layout_graph(HTLayoutContext* ctx, int ci, int dir, double* con
 		HTLayoutGraph gd, gr;
 		double wd, hd, wr, hr;
 		HTFlowDirection preferred = ctx->containers[ci].direction;
-		htree_layout_graph_frame(ctx, &base, htFlowDown, &gd, &wd, &hd);
-		htree_layout_graph_frame(ctx, &base, htFlowRight, &gr, &wr, &hr);
+		htree_layout_graph_frame(ctx, ci, &base, htFlowDown, &gd, &wd, &hd);
+		htree_layout_graph_frame(ctx, ci, &base, htFlowRight, &gr, &wr, &hr);
 		chosen = htree_layout_choose(wd, hd, wr, hr, htree_layout_target(&ctx->opts, preferred), preferred);
 	} else {
 		chosen = ctx->containers[ci].direction;
 	}
-	htree_layout_graph_frame(ctx, &base, chosen, &g, content_w, content_h);
+	htree_layout_graph_frame(ctx, ci, &base, chosen, &g, content_w, content_h);
 	ctx->containers[ci].direction = chosen;
 	htree_layout_apply_graph(ctx, ci, &g);
 	return HTREE_OK;
@@ -1359,7 +1499,7 @@ static void htree_layout_graph_extents(const HTLayoutContext* ctx, int ci, HTFlo
 {
 	HTLayoutGraph base, g;
 	htree_layout_graph_prepare(ctx, ci, &base);
-	htree_layout_graph_frame(ctx, &base, dir, &g, cw, ch);
+	htree_layout_graph_frame(ctx, ci, &base, dir, &g, cw, ch);
 }
 
 /* -----------------------------------------------------------------------------

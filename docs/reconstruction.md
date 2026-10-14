@@ -576,7 +576,10 @@ added without geometry is completed, not redrawn.
     P5 the order of a layer = the drawn cross        inserted by barycentre,
        coordinates, kept among the drawn states      the sweeps move only them
     P6 a drawn state is pinned: a pooled block       aims at the barycentre,
-       with drawn states takes their place           yields to the drawn
+       with drawn states takes their place           yields to the drawn;
+                                                     moves across the flow
+                                                     off a drawn route that
+                                                     stays (a bend too)
     P8 a container keeps its rect and grows when     a new container gets the
        the content needs it                          rect and the title band
                                                      of the full layout
@@ -616,7 +619,8 @@ machine beside a new one; tests 40-43 cover the edge pieces in a drawn
 container, the title band of a new container, the pinned drawn states
 with the lines along the drawn bands, and the new cycles; test 45 the
 implicit region of a drawn composite; test 46 a drawn group put into a new
-container with its routes.
+container with its routes; test 47 a new state and a bend kept off a drawn
+route.
 
 ## The Interface
 
@@ -736,7 +740,7 @@ on the result before printing it:
   without the border and as a top-level list, a chain inside a composite
   makes the two starts compete, a single state takes the preferred frame,
   a wide diamond takes the squarer one, the fixed mode, the option checks;
-* 39-43, 45, 46 the update (see The update);
+* 39-43, 45-47 the update (see The update);
 * 44 the entry and exit points of a machine in the full layout and in the
   update.
 
