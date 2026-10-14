@@ -42,8 +42,10 @@ int  htree_tree_bounding_rect(const HTree* tree, int skip_comments, HTreeRect** 
 
 /* htgeom_layout.cpp: the layered layout of one tree (docs/reconstruction.md) */
 int  htree_layout_check_options(const HTLayoutOptions* in, HTLayoutOptions* out);
-int  htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts);
-/* the machines of a document in a row, in the document order */
-int  htree_layout_place_trees(HTDocument* doc, const HTLayoutOptions* opts);
+/* update: the existing geometry is the seed of the layout and is kept */
+int  htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts, int update);
+/* the machines of a document in a row, in the document order; the drawn
+   ones (the flags, optional) keep their place */
+int  htree_layout_place_trees(HTDocument* doc, const HTLayoutOptions* opts, const int* drawn);
 
 #endif

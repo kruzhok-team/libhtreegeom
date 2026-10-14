@@ -1,5 +1,11 @@
 # libhtgeom project changelog
 
+## Version 1.2.0 (unreleased)
+
+Added:
+- the geometry update `htree_update_document_geometry`: the layered layout
+  seeded by the existing drawing, which is kept.
+
 ## Version 1.1.1 (unreleased)
 
 Added:

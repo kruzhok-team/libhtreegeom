@@ -101,3 +101,9 @@ border). The allocating functions return NULL on failure.
   sizes); `reconstruct_sm` allows creating the missing SM border rect,
   which a document with several machines creates anyway (the machines
   are placed in a row)
+* `htree_update_document_geometry(doc, reconstruct_sm, layout)` - the
+  update: the layered layout seeded by the existing geometry, which is
+  kept - the drawn elements keep their layers, order and places, the
+  geometry-less ones are inserted by the flow, containers only grow, the
+  untouched transitions keep their routes; a `NULL` layout takes the
+  defaults

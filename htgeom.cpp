@@ -1803,8 +1803,38 @@ int htree_grow_sm_border(HTree* tree)
 	return HTREE_OK;
 }
 
-int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
-										const HTLayoutOptions* layout)
+/* The update keeps the preset label sizes of the edges whose ends have no
+   geometry yet (the conversion drops the geometry of such edges), converts
+   the drawn geometry to the canonical form and restores the presets */
+static int htree_prepare_update(HTDocument* doc)
+{
+	std::vector<std::pair<HTreeEdge*, HTreeRect> > presets;
+	int res;
+
+	for (HTree* tree = doc->trees; tree; tree = tree->next) {
+		for (HTreeEdge* e = tree->edges; e; e = e->next) {
+			if (e->label_rect && e->source && e->target &&
+				(!(e->source->rect || e->source->point) || !(e->target->rect || e->target->point))) {
+				presets.push_back(std::make_pair(e, *e->label_rect));
+			}
+		}
+	}
+	res = htree_convert_document_geometry_to_absolute(doc);
+	if (res != HTREE_OK) {
+		return res;
+	}
+	for (size_t k = 0; k < presets.size(); k++) {
+		HTreeEdge* e = presets[k].first;
+		if (!e->label_rect) e->label_rect = htree_new_rect();
+		e->label_rect->x = e->label_rect->y = 0.0;
+		e->label_rect->width = presets[k].second.width;
+		e->label_rect->height = presets[k].second.height;
+	}
+	return HTREE_OK;
+}
+
+static int htree_rebuild_document_geometry(HTDocument* doc, int reconstruct_sm,
+										   const HTLayoutOptions* layout, int update)
 {
 	int res;
 	HTCoordFormat node_coord_format, edge_coord_format, edge_pl_coord_format;
@@ -1813,6 +1843,10 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
 
 	if (!doc || !doc->trees) {
 		return HTREE_BAD_PARAMETER;
+	}
+	if (update && !layout) {
+		htree_default_layout_options(&opts);
+		layout = &opts;
 	}
 	if (layout) {
 		res = htree_layout_check_options(layout, &opts);
@@ -1830,16 +1864,26 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
 		/* the full layout rebuilds the geometry from the structure in the
 		   canonical form; the incoming geometry is not converted (the
 		   conversion drops the preset label sizes of the unplaced edges) */
-		int many = doc->trees->next != NULL;
-		for (HTree* tree = doc->trees; tree; tree = tree->next) {
+		int many = doc->trees->next != NULL, k = 0;
+		std::vector<int> drawn;
+		if (update) {
+			res = htree_prepare_update(doc);
+			if (res != HTREE_OK) {
+				return res;
+			}
+			for (HTree* tree = doc->trees; tree; tree = tree->next) {
+				drawn.push_back(htree_tree_has_geometry(tree));
+			}
+		}
+		for (HTree* tree = doc->trees; tree; tree = tree->next, k++) {
 			/* a document with several machines draws every border */
-			res = htree_layout_tree(tree, reconstruct_sm || many, &opts);
+			res = htree_layout_tree(tree, reconstruct_sm || many, &opts, update);
 			if (res != HTREE_OK) {
 				return res;
 			}
 		}
 		if (many) {
-			res = htree_layout_place_trees(doc, &opts);
+			res = htree_layout_place_trees(doc, &opts, update ? &drawn[0] : NULL);
 			if (res != HTREE_OK) {
 				return res;
 			}
@@ -1891,6 +1935,18 @@ int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
 													 edge_coord_format,
 													 edge_pl_coord_format,
 													 edge_format);
+}
+
+int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
+										const HTLayoutOptions* layout)
+{
+	return htree_rebuild_document_geometry(doc, reconstruct_sm, layout, 0);
+}
+
+int htree_update_document_geometry(HTDocument* doc, int reconstruct_sm,
+								   const HTLayoutOptions* layout)
+{
+	return htree_rebuild_document_geometry(doc, reconstruct_sm, layout, 1);
 }
 
 int htree_convert_document_geometry(HTDocument* doc,

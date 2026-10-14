@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <set>
 #include <vector>
 
 #include "htgeom.h"
@@ -101,6 +102,10 @@ typedef struct {
 	double              flow_size, cross_size;
 	double              before, after; /* the cross-axis extents around the anchor */
 	double              flow, cross; /* the anchor in the frame: the centre, or the line of a label slot */
+	int                 seed;        /* the update: the vertex had geometry */
+	double              seed_x, seed_y;       /* its centre in the document */
+	double              seed_flow, seed_cross; /* its centre in the frame */
+	int                 seed_layer;  /* its band among the seeded vertices, 1.. */
 } HTLayoutVertex;
 
 typedef struct {
@@ -114,6 +119,7 @@ typedef struct {
 
 typedef struct {
 	HTFlowDirection                 direction;
+	int                             update;     /* the seeded layout */
 	std::vector<HTLayoutVertex>     vertices;   /* ENTRY, the children, EXIT, the dummies */
 	std::vector<HTLayoutEdge>       edges;
 	std::vector<std::vector<int> >  layers;     /* 0 = ENTRY .. last + 1 = EXIT */
@@ -159,9 +165,21 @@ typedef struct {
 	HTFlowDirection                 start;        /* the root frame of this pass */
 	int                             reconstruct_sm;
 	int                             sm_had_rect;
+	int                             update;       /* the existing geometry is the seed */
 	std::vector<HTLayoutContainer>  containers;   /* pre-order, 0 = the root */
 	std::map<const HTreeNode*, int> index;        /* lookup only */
+	std::map<const HTreeNode*, HTreePoint> seeds; /* the update: the centres before the layout */
+	std::set<const HTreeEdge*>      edge_seeds;   /* the update: the edges that had geometry */
+	std::set<const HTreeEdge*>      routed;       /* the edges routed in this pass */
 } HTLayoutContext;
+
+static int htree_layout_seeded(const HTLayoutContext* ctx, const HTreeNode* node, HTreePoint* centre)
+{
+	std::map<const HTreeNode*, HTreePoint>::const_iterator it = ctx->seeds.find(node);
+	if (it == ctx->seeds.end()) return 0;
+	if (centre) *centre = it->second;
+	return 1;
+}
 
 static int htree_layout_source_role(HTNodeRole r)
 {
@@ -385,6 +403,59 @@ static void htree_layout_seed_edges(HTLayoutContext* ctx)
 	}
 }
 
+/* The update: the flow direction of a drawn container is inferred from its
+   transitions between two drawn children (right-running against
+   down-running); the regions follow their composite; a container without
+   such transitions takes the preferred frame of its depth, alternating from
+   the inferred root */
+static void htree_layout_count_runs(const HTLayoutContext* ctx, int ci, int* right, int* down)
+{
+	const HTLayoutContainer& c = ctx->containers[ci];
+	for (size_t k = 0; k < c.seeds.size(); k++) {
+		const HTLayoutSeed& sd = c.seeds[k];
+		HTreePoint a, b;
+		double dx, dy;
+		if (sd.self_loop || sd.source_child < 0 || sd.target_child < 0) continue;
+		if (!htree_layout_seeded(ctx, c.children[sd.source_child], &a) ||
+			!htree_layout_seeded(ctx, c.children[sd.target_child], &b)) continue;
+		dx = b.x - a.x;
+		dy = b.y - a.y;
+		if (dx > std::fabs(dy)) (*right)++;
+		else if (dy > std::fabs(dx)) (*down)++;
+	}
+}
+
+static void htree_layout_infer_directions(HTLayoutContext* ctx)
+{
+	for (size_t ci = 0; ci < ctx->containers.size(); ci++) {
+		HTLayoutContainer& c = ctx->containers[ci];
+		int right = 0, down = 0;
+		if (c.node && c.node->type == htRegion) continue;    /* set by the composite */
+		if (c.kind == htContainerRegions) {
+			for (HTreeNode* r = c.node->children; r; r = r->next) {
+				std::map<const HTreeNode*, int>::const_iterator it;
+				if (r->type != htRegion) continue;
+				it = ctx->index.find(r);
+				if (it != ctx->index.end()) htree_layout_count_runs(ctx, it->second, &right, &down);
+			}
+		} else {
+			htree_layout_count_runs(ctx, (int)ci, &right, &down);
+		}
+		if (right > down) c.direction = htFlowRight;
+		else if (down > right) c.direction = htFlowDown;
+		else c.direction = htree_layout_preferred(&ctx->opts, ctx->start, c.level);
+		if (ci == 0) ctx->start = c.direction;
+		if (c.kind == htContainerRegions) {
+			for (HTreeNode* r = c.node->children; r; r = r->next) {
+				std::map<const HTreeNode*, int>::const_iterator it;
+				if (r->type != htRegion) continue;
+				it = ctx->index.find(r);
+				if (it != ctx->index.end()) ctx->containers[it->second].direction = c.direction;
+			}
+		}
+	}
+}
+
 /* -----------------------------------------------------------------------------
  * The layered layout of one graph container: P2 - P6
  * ----------------------------------------------------------------------------- */
@@ -396,6 +467,7 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 	size_t n = c.children.size();
 
 	g->direction = c.direction;
+	g->update = ctx->update;
 	g->vertices.assign(n + 2, HTLayoutVertex());
 	g->entry = 0;
 	g->exit = (int)n + 1;
@@ -411,11 +483,20 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 		v.flow_size = v.cross_size = 0.0;
 		v.before = v.after = 0.0;
 		v.flow = v.cross = 0.0;
+		v.seed = 0;
+		v.seed_x = v.seed_y = v.seed_flow = v.seed_cross = 0.0;
+		v.seed_layer = 0;
 		if (k >= 1 && k <= n) {
 			HTreeNode* node = c.children[k - 1];
+			HTreePoint centre;
 			v.node = node;
 			v.role = node->role;
 			v.kind = htVertexReal;
+			if (ctx->update && htree_layout_seeded(ctx, node, &centre)) {
+				v.seed = 1;
+				v.seed_x = centre.x;
+				v.seed_y = centre.y;
+			}
 			if (node->rect) {
 				htree_layout_size_to_frame(c.direction, node->rect->width, node->rect->height,
 										   &v.flow_size, &v.cross_size);
@@ -429,6 +510,12 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 		const HTLayoutSeed& s = c.seeds[k];
 		HTLayoutEdge e;
 		if (s.self_loop) continue;
+		if (ctx->update && (s.source_child < 0 || g->vertices[s.source_child + 1].seed) &&
+			(s.target_child < 0 || g->vertices[s.target_child + 1].seed)) {
+			/* a transition between drawn elements keeps its drawn geometry
+			   and takes no part in the seeded layout */
+			continue;
+		}
 		e.source = s.source_child < 0 ? g->entry : s.source_child + 1;
 		e.target = s.target_child < 0 ? g->exit : s.target_child + 1;
 		e.edge = s.edge;
@@ -462,8 +549,16 @@ static void htree_layout_break_cycles(HTLayoutGraph* g, std::vector<int>& topo)
 
 	for (size_t k = 0; k < g->edges.size(); k++) {
 		HTLayoutEdge& e = g->edges[k];
-		if ((htree_layout_source_role(g->vertices[e.target].role) && e.source != g->entry) ||
-			(htree_layout_sink_role(g->vertices[e.source].role) && e.target != g->exit)) {
+		const HTLayoutVertex& sv = g->vertices[e.source];
+		const HTLayoutVertex& tv = g->vertices[e.target];
+		if (g->update && sv.seed && tv.seed) {
+			/* the drawing decides: a transition running backward is the back edge */
+			if (tv.seed_flow < sv.seed_flow - HTREE_COORD_EPS) htree_layout_reverse_edge(e);
+			continue;
+		}
+		if (g->update && (sv.seed || tv.seed)) continue;   /* the roles of the drawn vertices stay drawn */
+		if ((htree_layout_source_role(tv.role) && e.source != g->entry) ||
+			(htree_layout_sink_role(sv.role) && e.target != g->exit)) {
 			htree_layout_reverse_edge(e);
 		}
 	}
@@ -502,42 +597,100 @@ static void htree_layout_break_cycles(HTLayoutGraph* g, std::vector<int>& topo)
 	std::reverse(topo.begin(), topo.end());
 }
 
-/* P3: the longest-path layering with the pinned roles */
+/* the update: the drawn vertices sorted along the flow fall into bands - a
+   new band starts where the next extent does not overlap the band so far */
+static void htree_layout_seed_bands(HTLayoutGraph* g)
+{
+	std::vector<std::pair<double, int> > order;
+	double band_end = 0.0;
+	int band = 0;
+	for (size_t v = 1; v + 1 < g->vertices.size(); v++) {
+		const HTLayoutVertex& vx = g->vertices[v];
+		if (vx.kind == htVertexReal && vx.seed) {
+			order.push_back(std::make_pair(vx.seed_flow - vx.flow_size / 2.0, (int)v));
+		}
+	}
+	std::stable_sort(order.begin(), order.end());
+	for (size_t i = 0; i < order.size(); i++) {
+		HTLayoutVertex& vx = g->vertices[order[i].second];
+		double start = order[i].first, end = vx.seed_flow + vx.flow_size / 2.0;
+		if (band == 0 || start > band_end - HTREE_COORD_EPS) {
+			band++;
+			band_end = end;
+		} else if (end > band_end) {
+			band_end = end;
+		}
+		vx.seed_layer = band;
+	}
+}
+
+/* P3: the longest-path layering with the pinned roles; in the update the
+   seed bands are the lower bounds and stay whole and ordered */
 static void htree_layout_assign_layers(HTLayoutGraph* g, const std::vector<int>& topo)
 {
 	size_t n = g->vertices.size();
 	std::vector<std::vector<int> > in(n);
-	int has_source = 0, max_layer = 0, sink_layer, exit_layer;
+	int has_source = 0, max_layer = 0, sink_layer, exit_layer, bands = 0;
 
 	for (size_t k = 0; k < g->edges.size(); k++) {
 		in[g->edges[k].target].push_back((int)k);
 	}
 	for (size_t v = 1; v < n; v++) {
-		if (g->vertices[v].kind == htVertexReal && htree_layout_source_role(g->vertices[v].role)) has_source = 1;
+		if (g->vertices[v].kind == htVertexReal && htree_layout_source_role(g->vertices[v].role) &&
+			!(g->update && g->vertices[v].seed)) has_source = 1;
 	}
-	for (size_t t = 0; t < topo.size(); t++) {
-		int v = topo[t];
-		HTLayoutVertex& vx = g->vertices[v];
-		int layer;
-		if (v == g->entry) {
-			layer = 0;
-		} else if (v == g->exit) {
-			layer = 1;
-		} else {
-			layer = (has_source && !htree_layout_source_role(vx.role)) ? 2 : 1;
-		}
-		for (size_t k = 0; k < in[v].size(); k++) {
-			const HTLayoutEdge& e = g->edges[in[v][k]];
-			int need = g->vertices[e.source].layer + (e.has_label ? 2 : 1);
-			if (need > layer) layer = need;
-		}
-		vx.layer = layer;
+	if (g->update) {
+		htree_layout_seed_bands(g);
+		for (size_t v = 1; v + 1 < n; v++) if (g->vertices[v].seed_layer > bands) bands = g->vertices[v].seed_layer;
 	}
-	/* the sinks close the flow in a common last layer */
+	std::vector<int> band_layer(bands + 1);
+	for (int b = 0; b <= bands; b++) band_layer[b] = b;
+	for (int round = 0; round <= bands; round++) {
+		int changed = 0;
+		for (size_t t = 0; t < topo.size(); t++) {
+			int v = topo[t];
+			HTLayoutVertex& vx = g->vertices[v];
+			int layer;
+			if (v == g->entry) {
+				layer = 0;
+			} else if (v == g->exit) {
+				layer = 1;
+			} else if (vx.seed) {
+				layer = band_layer[vx.seed_layer];
+			} else {
+				layer = (has_source && !htree_layout_source_role(vx.role)) ? 2 : 1;
+			}
+			for (size_t k = 0; k < in[v].size(); k++) {
+				const HTLayoutEdge& e = g->edges[in[v][k]];
+				int need = g->vertices[e.source].layer + (e.has_label ? 2 : 1);
+				if (need > layer) layer = need;
+			}
+			vx.layer = layer;
+		}
+		if (!g->update) break;
+		/* a pushed band drags the later bands along, as whole bands */
+		for (int b = 1, floor = 0; b <= bands; b++) {
+			int top = 0;
+			for (size_t v = 1; v + 1 < n; v++) {
+				const HTLayoutVertex& vx = g->vertices[v];
+				if (vx.seed_layer == b && vx.layer > top) top = vx.layer;
+			}
+			if (top < floor + 1) top = floor + 1;
+			if (band_layer[b] != top) changed = 1;
+			band_layer[b] = top;
+			for (size_t v = 1; v + 1 < n; v++) {
+				HTLayoutVertex& vx = g->vertices[v];
+				if (vx.seed_layer == b) vx.layer = top;
+			}
+			floor = top;
+		}
+		if (!changed) break;
+	}
+	/* the sinks close the flow in a common last layer (the drawn ones stay) */
 	sink_layer = 0;
 	for (size_t v = 1; v + 1 < n; v++) {
 		const HTLayoutVertex& vx = g->vertices[v];
-		if (htree_layout_sink_role(vx.role)) {
+		if (htree_layout_sink_role(vx.role) && !(g->update && vx.seed)) {
 			if (vx.layer > sink_layer) sink_layer = vx.layer;
 		} else if (vx.layer > max_layer) {
 			max_layer = vx.layer;
@@ -546,7 +699,7 @@ static void htree_layout_assign_layers(HTLayoutGraph* g, const std::vector<int>&
 	if (sink_layer > 0 && sink_layer < max_layer + 1) sink_layer = max_layer + 1;
 	for (size_t v = 1; v + 1 < n; v++) {
 		HTLayoutVertex& vx = g->vertices[v];
-		if (htree_layout_sink_role(vx.role)) vx.layer = sink_layer;
+		if (htree_layout_sink_role(vx.role) && !(g->update && vx.seed)) vx.layer = sink_layer;
 	}
 	g->last = sink_layer > max_layer ? sink_layer : max_layer;
 	exit_layer = g->last + 1;
@@ -558,6 +711,8 @@ static void htree_layout_assign_layers(HTLayoutGraph* g, const std::vector<int>&
 	g->vertices[g->exit].layer = exit_layer;
 	g->last = exit_layer - 1;
 }
+
+static void htree_layout_reindex(HTLayoutGraph* g, int l);
 
 static int htree_layout_add_dummy(HTLayoutGraph* g, HTLayoutVertexKind kind, int edge, int layer,
 								  double flow_size, double before, double after)
@@ -574,6 +729,9 @@ static int htree_layout_add_dummy(HTLayoutGraph* g, HTLayoutVertexKind kind, int
 	v.before = before;
 	v.after = after;
 	v.flow = v.cross = 0.0;
+	v.seed = 0;
+	v.seed_x = v.seed_y = v.seed_flow = v.seed_cross = 0.0;
+	v.seed_layer = 0;
 	g->vertices.push_back(v);
 	return (int)g->vertices.size() - 1;
 }
@@ -610,6 +768,20 @@ static void htree_layout_insert_dummies(HTLayoutGraph* g, const HTLayoutOptions*
 		g->vertices[v].order = (int)L.size();
 		L.push_back((int)v);
 	}
+	if (g->update) {
+		/* the drawn vertices by their drawn cross position, the others after */
+		for (int l = 0; l <= g->last + 1; l++) {
+			std::vector<int>& L = g->layers[l];
+			std::vector<std::pair<double, int> > keyed;
+			for (size_t i = 0; i < L.size(); i++) {
+				const HTLayoutVertex& vx = g->vertices[L[i]];
+				keyed.push_back(std::make_pair(vx.seed ? vx.seed_cross : 1e300, L[i]));
+			}
+			std::stable_sort(keyed.begin(), keyed.end());
+			for (size_t i = 0; i < L.size(); i++) L[i] = keyed[i].second;
+			htree_layout_reindex(g, l);
+		}
+	}
 	g->up.assign(g->vertices.size(), std::vector<int>());
 	g->down.assign(g->vertices.size(), std::vector<int>());
 	for (size_t k = 0; k < g->edges.size(); k++) {
@@ -643,7 +815,7 @@ static void htree_layout_barycentres(const HTLayoutGraph* g, int l, int fixed_up
 	b.assign(L.size(), 0.0);
 	for (size_t i = 0; i < L.size(); i++) {
 		const std::vector<int>& nb = fixed_up ? g->up[L[i]] : g->down[L[i]];
-		if (nb.empty()) {
+		if (nb.empty() || (g->update && g->vertices[L[i]].seed)) {
 			b[i] = g->vertices[L[i]].order;
 		} else {
 			double sum = 0.0;
@@ -734,8 +906,12 @@ static int htree_layout_order_phase2(HTLayoutGraph* g)
 		htree_layout_barycentres(g, l, 1, b);
 		for (size_t i = 0; i < L.size();) {
 			size_t j = i + 1;
-			while (j < L.size() && std::fabs(b[j] - b[i]) < HTREE_COORD_EPS) j++;
-			if (j - i > 1) {
+			int drawn = g->update && g->vertices[L[i]].seed;
+			while (j < L.size() && std::fabs(b[j] - b[i]) < HTREE_COORD_EPS) {
+				if (g->update && g->vertices[L[j]].seed) drawn = 1;
+				j++;
+			}
+			if (j - i > 1 && !drawn) {
 				std::reverse(L.begin() + i, L.begin() + j);
 				any = 1;
 			}
@@ -768,6 +944,9 @@ static double htree_layout_gap(const HTLayoutGraph* g, const HTLayoutOptions* o,
 	if (g->vertices[u].kind == htVertexEdgeDummy && g->vertices[v].kind == htVertexEdgeDummy) {
 		return o->padding;
 	}
+	if (g->update && g->vertices[u].seed && g->vertices[v].seed) {
+		return 0.0;   /* the drawn neighbours keep their drawn gap */
+	}
 	return o->node_gap;
 }
 
@@ -779,6 +958,7 @@ static void htree_layout_pack_layer(HTLayoutGraph* g, const HTLayoutOptions* o, 
 		HTLayoutVertex& v = g->vertices[L[i]];
 		if (i > 0) pos += htree_layout_gap(g, o, L[i - 1], L[i]) + v.before;
 		else pos = v.before;
+		if (g->update && v.seed && v.seed_cross > pos) pos = v.seed_cross;
 		v.cross = pos;
 		pos += v.after;
 	}
@@ -824,7 +1004,11 @@ static void htree_layout_priority_pass(HTLayoutGraph* g, const HTLayoutOptions* 
 			off[i] = off[i - 1] + g->vertices[L[i - 1]].after +
 				htree_layout_gap(g, o, L[i - 1], L[i]) + v.before;
 		}
-		if (nb.empty()) {
+		if (g->update && v.seed) {
+			/* a drawn vertex aims at its drawn place above every pull */
+			d[i] = v.seed_cross;
+			w[i] = top * top;
+		} else if (nb.empty()) {
 			d[i] = v.cross;
 			w[i] = HTREE_COORD_EPS;
 		} else {
@@ -865,6 +1049,51 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 	for (int l = g->last - 1; l >= 1; l--) htree_layout_priority_pass(g, o, l, 0);
 	for (int l = t < 1 ? 1 : t; l <= g->last; l++) htree_layout_priority_pass(g, o, l, 1);
 
+	if (g->update) {
+		/* the drawn bands keep their drawn flow positions, shifted as a whole
+		   only to make room for an inserted band; a new band takes the room
+		   of its tallest vertex */
+		double cursor = 0.0, shift = 0.0;
+		int any = 0, after_new = 0;
+		for (int l = 1; l <= g->last; l++) {
+			const std::vector<int>& L = g->layers[l];
+			double lo = 0.0, hi = 0.0, tall = 0.0;
+			int seeded = 0;
+			for (size_t i = 0; i < L.size(); i++) {
+				const HTLayoutVertex& vx = g->vertices[L[i]];
+				if (vx.seed) {
+					double a = vx.seed_flow - vx.flow_size / 2.0, b = vx.seed_flow + vx.flow_size / 2.0;
+					if (!seeded || a < lo) lo = a;
+					if (!seeded || b > hi) hi = b;
+					seeded = 1;
+				} else if (vx.flow_size > tall) {
+					tall = vx.flow_size;
+				}
+			}
+			if (seeded) {
+				double need = any ? cursor + (after_new ? o->layer_gap : 0.0) : lo + shift;
+				if (lo + shift < need) shift = need - lo;
+				lo += shift;
+				hi += shift;
+				if (hi - lo < tall) hi = lo + tall;
+				for (size_t i = 0; i < L.size(); i++) {
+					HTLayoutVertex& vx = g->vertices[L[i]];
+					vx.flow = vx.seed ? vx.seed_flow + shift : (lo + hi) / 2.0;
+				}
+				cursor = hi;
+				after_new = 0;
+			} else {
+				double from = any ? cursor + o->layer_gap : 0.0;
+				for (size_t i = 0; i < L.size(); i++) g->vertices[L[i]].flow = from + tall / 2.0;
+				cursor = from + tall;
+				after_new = 1;
+			}
+			any = 1;
+		}
+		g->vertices[g->entry].flow = 0.0;
+		g->vertices[g->exit].flow = cursor;
+		return;
+	}
 	for (int l = 1; l <= g->last; l++) {
 		const std::vector<int>& L = g->layers[l];
 		double band = 0.0;
@@ -957,6 +1186,12 @@ static void htree_layout_graph_prepare(const HTLayoutContext* ctx, int ci, HTLay
 {
 	std::vector<int> topo;
 	htree_layout_build_graph(ctx, ci, g);
+	for (size_t v = 0; v < g->vertices.size(); v++) {
+		HTLayoutVertex& vx = g->vertices[v];
+		if (!vx.seed) continue;
+		if (g->direction == htFlowDown) { vx.seed_flow = vx.seed_y; vx.seed_cross = vx.seed_x; }
+		else { vx.seed_flow = vx.seed_x; vx.seed_cross = vx.seed_y; }
+	}
 	htree_layout_break_cycles(g, topo);
 	htree_layout_assign_layers(g, topo);
 	htree_layout_insert_dummies(g, &ctx->opts);
@@ -975,6 +1210,10 @@ static void htree_layout_graph_frame(const HTLayoutContext* ctx, const HTLayoutG
 	g->direction = dir;
 	for (size_t v = 0; v < g->vertices.size(); v++) {
 		HTLayoutVertex& vx = g->vertices[v];
+		if (vx.seed) {
+			if (dir == htFlowDown) { vx.seed_flow = vx.seed_y; vx.seed_cross = vx.seed_x; }
+			else { vx.seed_flow = vx.seed_x; vx.seed_cross = vx.seed_y; }
+		}
 		if (vx.kind == htVertexReal && vx.node && vx.node->rect) {
 			htree_layout_size_to_frame(dir, vx.node->rect->width, vx.node->rect->height,
 									   &vx.flow_size, &vx.cross_size);
@@ -1005,7 +1244,7 @@ static int htree_layout_graph(HTLayoutContext* ctx, int ci, int dir, double* con
 	htree_layout_graph_prepare(ctx, ci, &base);
 	if (dir >= 0) {
 		chosen = (HTFlowDirection)dir;
-	} else if (ctx->opts.mode == htLayoutAdaptive) {
+	} else if (ctx->opts.mode == htLayoutAdaptive && !ctx->update) {
 		HTLayoutGraph gd, gr;
 		double wd, hd, wr, hr;
 		HTFlowDirection preferred = ctx->containers[ci].direction;
@@ -1102,6 +1341,8 @@ static void htree_layout_stack_extents(const HTLayoutContext* ctx, int ci, HTFlo
 
 static int htree_layout_container_forced(HTLayoutContext* ctx, int ci, HTFlowDirection dir);
 static int htree_layout_container(HTLayoutContext* ctx, int ci);
+static void htree_layout_content_bounds(const HTLayoutContext* ctx, int ci, HTreeRect* r);
+static void htree_layout_node_centre(const HTreeNode* n, HTreePoint* p);
 
 /* P7: the regions laid out in the composite's frame, side by side across
    the flow axis, widened to the widest */
@@ -1111,7 +1352,7 @@ static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w,
 	HTFlowDirection dir = c.direction;
 	double max_flow = 0.0, cursor = 0.0, w = 0.0, h = 0.0;
 
-	if (ctx->opts.mode == htLayoutAdaptive) {
+	if (ctx->opts.mode == htLayoutAdaptive && !ctx->update) {
 		double wd, hd, wr, hr;
 		htree_layout_stack_extents(ctx, ci, htFlowDown, &wd, &hd);
 		htree_layout_stack_extents(ctx, ci, htFlowRight, &wr, &hr);
@@ -1126,6 +1367,29 @@ static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w,
 		if (it == ctx->index.end()) return HTREE_BAD_PARAMETER;
 		res = htree_layout_container_forced(ctx, it->second, dir);
 		if (res != HTREE_OK) return res;
+	}
+	if (ctx->update) {
+		/* the drawn regions keep their rects; a new region goes after them */
+		HTreeRect u;
+		int any = 0;
+		htree_init_rect(&u);
+		for (HTreeNode* r = c.node->children; r; r = r->next) {
+			if (r->type != htRegion || !r->rect) continue;
+			if (!htree_layout_seeded(ctx, r, NULL)) {
+				if (dir == htFlowDown) htree_shift_subtree(r, u.x + u.width + ctx->opts.node_gap - r->rect->x, u.y - r->rect->y);
+				else htree_shift_subtree(r, u.x - r->rect->x, u.y + u.height + ctx->opts.node_gap - r->rect->y);
+			}
+			if (!any) { u = *r->rect; any = 1; continue; }
+			double x2 = u.x + u.width > r->rect->x + r->rect->width ? u.x + u.width : r->rect->x + r->rect->width;
+			double y2 = u.y + u.height > r->rect->y + r->rect->height ? u.y + u.height : r->rect->y + r->rect->height;
+			if (r->rect->x < u.x) u.x = r->rect->x;
+			if (r->rect->y < u.y) u.y = r->rect->y;
+			u.width = x2 - u.x;
+			u.height = y2 - u.y;
+		}
+		*content_w = u.width;
+		*content_h = u.height;
+		return HTREE_OK;
 	}
 	for (HTreeNode* r = c.node->children; r; r = r->next) {
 		if (r->type != htRegion || !r->rect) continue;
@@ -1169,6 +1433,7 @@ static void htree_layout_place_border_points(const HTLayoutContext* ctx, int par
 		const HTreeRect* r = node->rect;
 		double f;
 		if (!htree_layout_is_border_point(p)) continue;
+		if (ctx->update && p->point) continue;
 		if (!p->point) p->point = htree_new_point();
 		if (p->role == htRoleEntryPoint) {
 			f = (ke + 1.0) / (entries + 1.0);
@@ -1229,6 +1494,80 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 
 	node = ctx->containers[ci].node;
 	htree_layout_fit(ctx, node, cw, ch, &W, &H, &ix, &iy);
+	if (ctx->update) {
+		/* the content goes back to the drawing: a drawn child anchors it,
+		   else it starts inside the drawn rect; the rect only grows */
+		const HTLayoutContainer& c = ctx->containers[ci];
+		HTreeRect bounds;
+		int anchored = 0;
+		if (c.kind == htContainerRegions) {
+			anchored = 1;
+			ix = iy = 0.0;
+		}
+		for (size_t k = 0; k < c.children.size() && !anchored; k++) {
+			HTreePoint seed;
+			if (!htree_layout_seeded(ctx, c.children[k], &seed)) continue;
+			ix = seed.x - (c.children[k]->rect ? c.children[k]->rect->x + c.children[k]->rect->width / 2.0 :
+							c.children[k]->point ? c.children[k]->point->x : 0.0);
+			iy = seed.y - (c.children[k]->rect ? c.children[k]->rect->y + c.children[k]->rect->height / 2.0 :
+							c.children[k]->point ? c.children[k]->point->y : 0.0);
+			anchored = 1;
+		}
+		if (!anchored && node && node->rect) {
+			ix += node->rect->x;
+			iy += node->rect->y;
+		}
+		for (HTreeNode* child = htree_layout_first_child(ctx, ci); child; child = child->next) {
+			if (htree_node_is_comment(child) || htree_layout_is_border_point(child)) continue;
+			if (htree_layout_is_container(child)) htree_layout_place_border_points(ctx, ci, child);
+			htree_shift_subtree(child, ix, iy);
+		}
+		{
+			std::vector<HTLayoutPiece>& pieces = ctx->containers[ci].pieces;
+			for (size_t k = 0; k < pieces.size(); k++) {
+				for (size_t i = 0; i < pieces[k].bends.size(); i++) {
+					pieces[k].bends[i].x += ix;
+					pieces[k].bends[i].y += iy;
+				}
+				pieces[k].label.x += ix;
+				pieces[k].label.y += iy;
+			}
+		}
+		if (node && (!is_root || ctx->reconstruct_sm || ctx->sm_had_rect || node->rect)) {
+			htree_layout_content_bounds(ctx, ci, &bounds);
+			if (node->rect) {
+				/* grow-only around the content with the padding */
+				double x1 = bounds.x - ctx->opts.padding, y1 = bounds.y - ctx->opts.padding;
+				double x2 = bounds.x + bounds.width + ctx->opts.padding;
+				double y2 = bounds.y + bounds.height + ctx->opts.padding;
+				double rx2 = node->rect->x + node->rect->width, ry2 = node->rect->y + node->rect->height;
+				if (bounds.width > 0.0 || bounds.height > 0.0) {
+					if (x1 < node->rect->x) node->rect->x = x1;
+					if (y1 < node->rect->y) node->rect->y = y1;
+					if (x2 > rx2) rx2 = x2;
+					if (y2 > ry2) ry2 = y2;
+					node->rect->width = rx2 - node->rect->x;
+					node->rect->height = ry2 - node->rect->y;
+				}
+			} else {
+				node->rect = htree_new_rect();
+				node->rect->x = bounds.x - ctx->opts.padding;
+				node->rect->y = bounds.y - ctx->opts.padding;
+				node->rect->width = bounds.width + 2 * ctx->opts.padding;
+				node->rect->height = bounds.height + 2 * ctx->opts.padding;
+				if (node->rect->width < W) node->rect->width = W;
+				if (node->rect->height < H) node->rect->height = H;
+			}
+		}
+		if (node && node->rect && ctx->seeds.find(node) != ctx->seeds.end()) {
+			/* a grown container keeps its drawn corner: its parent anchors
+			   the new centre */
+			HTreePoint centre;
+			htree_layout_node_centre(node, &centre);
+			ctx->seeds[node] = centre;
+		}
+		return HTREE_OK;
+	}
 	for (HTreeNode* child = htree_layout_first_child(ctx, ci); child; child = child->next) {
 		if (htree_node_is_comment(child) || htree_layout_is_border_point(child)) continue;
 		if (htree_layout_is_container(child)) htree_layout_place_border_points(ctx, ci, child);
@@ -1518,6 +1857,7 @@ static void htree_layout_spread_pairs(HTLayoutContext* ctx)
 		double step = 2 * ctx->opts.padding, k = 0.0;
 		if (!e->source || !e->target || e->source == e->target || e->polyline ||
 			!e->source_point || !e->target_point) continue;
+		if (ctx->update && ctx->routed.find(e) == ctx->routed.end()) continue;
 		for (HTreeEdge* f = e; f; f = f->next) {
 			if (f->source && f->target && f != e && f->source != f->target && !f->polyline &&
 				f->source_point && f->target_point && htree_layout_same_pair(e, f)) {
@@ -1530,7 +1870,8 @@ static void htree_layout_spread_pairs(HTLayoutContext* ctx)
 		}
 		for (HTreeEdge* f = ctx->tree->edges; f; f = f->next) {
 			if (f->source && f->target && f->source != f->target && !f->polyline &&
-				f->source_point && f->target_point && htree_layout_same_pair(e, f)) group.push_back(f);
+				f->source_point && f->target_point && htree_layout_same_pair(e, f) &&
+				(!ctx->update || ctx->routed.find(f) != ctx->routed.end())) group.push_back(f);
 		}
 		if (group.size() < 2 || group[0] != e) continue;
 		ci = htree_layout_container_of(ctx, e->source);
@@ -1542,6 +1883,29 @@ static void htree_layout_spread_pairs(HTLayoutContext* ctx)
 	}
 }
 
+/* the update: a drawn transition keeps its geometry when neither end moved */
+static int htree_layout_edge_kept(const HTLayoutContext* ctx, const HTreeEdge* e)
+{
+	HTreePoint seed, now;
+	if (!ctx->update || ctx->edge_seeds.find(e) == ctx->edge_seeds.end()) return 0;
+	htree_layout_node_centre(e->source, &now);
+	if (!htree_layout_seeded(ctx, e->source, &seed) ||
+		std::fabs(seed.x - now.x) > HTREE_COORD_EPS || std::fabs(seed.y - now.y) > HTREE_COORD_EPS) return 0;
+	htree_layout_node_centre(e->target, &now);
+	if (!htree_layout_seeded(ctx, e->target, &seed) ||
+		std::fabs(seed.x - now.x) > HTREE_COORD_EPS || std::fabs(seed.y - now.y) > HTREE_COORD_EPS) return 0;
+	return 1;
+}
+
+static void htree_layout_drop_edge_geometry(HTreeEdge* e)
+{
+	if (e->source_point) { htree_destroy_point(e->source_point); e->source_point = NULL; }
+	if (e->target_point) { htree_destroy_point(e->target_point); e->target_point = NULL; }
+	if (e->label_point) { htree_destroy_point(e->label_point); e->label_point = NULL; }
+	if (e->polyline) { htree_destroy_polyline(e->polyline); e->polyline = NULL; }
+	if (e->label_rect) { e->label_rect->x = e->label_rect->y = 0.0; }   /* the size stays the preset */
+}
+
 static int htree_layout_route_edges(HTLayoutContext* ctx)
 {
 	for (HTreeEdge* e = ctx->tree->edges; e; e = e->next) {
@@ -1549,6 +1913,11 @@ static int htree_layout_route_edges(HTLayoutContext* ctx)
 		if (!e->source || !e->target ||
 			htree_node_is_comment(e->source) || htree_node_is_comment(e->target)) continue;
 		if (!(e->source->rect || e->source->point) || !(e->target->rect || e->target->point)) continue;
+		if (ctx->update) {
+			if (htree_layout_edge_kept(ctx, e)) continue;
+			htree_layout_drop_edge_geometry(e);
+			ctx->routed.insert(e);
+		}
 		if (e->source == e->target) {
 			htree_layout_route_loop(ctx, e);
 			continue;
@@ -1686,8 +2055,21 @@ static void htree_layout_final_shape(const HTLayoutContext* ctx, double* w, doub
 	*h = r.height;
 }
 
+/* the update: the centres of the drawn nodes and the drawn edges are the seeds */
+static void htree_layout_collect_seeds(HTLayoutContext* ctx, HTreeNode* nodes)
+{
+	for (HTreeNode* n = nodes; n; n = n->next) {
+		if (n->rect || n->point) {
+			HTreePoint c;
+			htree_layout_node_centre(n, &c);
+			ctx->seeds[n] = c;
+		}
+		if (n->children) htree_layout_collect_seeds(ctx, n->children);
+	}
+}
+
 static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts,
-								  HTFlowDirection start, double* w, double* h)
+								  HTFlowDirection start, int update, double* w, double* h)
 {
 	HTLayoutContext ctx;
 	HTreeNode* root;
@@ -1697,19 +2079,28 @@ static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayou
 	ctx.opts = *opts;
 	ctx.start = start;
 	ctx.reconstruct_sm = reconstruct_sm;
+	ctx.update = update;
 	root = (tree->nodes && !tree->nodes->next && tree->nodes->type == htTree) ? tree->nodes : NULL;
 	ctx.sm_had_rect = root && root->rect;
 
-	if (tree->nodes) htree_clean_tree_geometry(tree->nodes);
-	for (HTreeEdge* e = tree->edges; e; e = e->next) {
-		if (e->source_point) { htree_destroy_point(e->source_point); e->source_point = NULL; }
-		if (e->target_point) { htree_destroy_point(e->target_point); e->target_point = NULL; }
-		if (e->label_point) { htree_destroy_point(e->label_point); e->label_point = NULL; }
-		if (e->polyline) { htree_destroy_polyline(e->polyline); e->polyline = NULL; }
+	if (update) {
+		if (tree->nodes) htree_layout_collect_seeds(&ctx, tree->nodes);
+		for (HTreeEdge* e = tree->edges; e; e = e->next) {
+			if (e->source_point || e->target_point || e->polyline || e->label_point) ctx.edge_seeds.insert(e);
+		}
+	} else {
+		if (tree->nodes) htree_clean_tree_geometry(tree->nodes);
+		for (HTreeEdge* e = tree->edges; e; e = e->next) {
+			if (e->source_point) { htree_destroy_point(e->source_point); e->source_point = NULL; }
+			if (e->target_point) { htree_destroy_point(e->target_point); e->target_point = NULL; }
+			if (e->label_point) { htree_destroy_point(e->label_point); e->label_point = NULL; }
+			if (e->polyline) { htree_destroy_polyline(e->polyline); e->polyline = NULL; }
+		}
 	}
 
 	htree_layout_collect(&ctx, root, 0);
 	htree_layout_seed_edges(&ctx);
+	if (update) htree_layout_infer_directions(&ctx);
 	res = htree_layout_container(&ctx, 0);
 	if (res != HTREE_OK) return res;
 	res = htree_layout_route_edges(&ctx);
@@ -1724,7 +2115,7 @@ static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayou
 /* the adaptive mode tries both starts and keeps the layout whose machine
    shape is better (wide rather than tall, then closer to the target); the
    geometry of the winner stays */
-int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts)
+int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts, int update)
 {
 	double wr, hr, wd, hd;
 	int res, better;
@@ -1732,16 +2123,16 @@ int htree_layout_tree(HTree* tree, int reconstruct_sm, const HTLayoutOptions* op
 	if (!tree || !opts) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (opts->mode != htLayoutAdaptive) {
-		return htree_layout_tree_pass(tree, reconstruct_sm, opts, opts->direction, &wr, &hr);
+	if (update || opts->mode != htLayoutAdaptive) {
+		return htree_layout_tree_pass(tree, reconstruct_sm, opts, opts->direction, update, &wr, &hr);
 	}
-	res = htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowRight, &wr, &hr);
+	res = htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowRight, 0, &wr, &hr);
 	if (res != HTREE_OK) return res;
-	res = htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowDown, &wd, &hd);
+	res = htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowDown, 0, &wd, &hd);
 	if (res != HTREE_OK) return res;
 	better = htree_layout_shape_better(wr, hr, wd, hd, opts->aspect);
 	if (better == 0 || (better < 0 && opts->direction == htFlowRight)) {
-		return htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowRight, &wr, &hr);
+		return htree_layout_tree_pass(tree, reconstruct_sm, opts, htFlowRight, 0, &wr, &hr);
 	}
 	return HTREE_OK;
 }
@@ -1767,16 +2158,28 @@ static void htree_shift_tree(HTree* tree, double dx, double dy)
 /* the machines side by side (wide rather than tall) in the document order,
    two node gaps apart, their tops aligned; the comments travel with their
    machine */
-int htree_layout_place_trees(HTDocument* doc, const HTLayoutOptions* opts)
+int htree_layout_place_trees(HTDocument* doc, const HTLayoutOptions* opts, const int* drawn)
 {
 	double cursor = 0.0;
+	int k = 0;
 
 	if (!doc || !opts) {
 		return HTREE_BAD_PARAMETER;
 	}
-	for (HTree* tree = doc->trees; tree; tree = tree->next) {
+	/* the update: the drawn machines stay, the row starts after their extent */
+	for (HTree* tree = doc->trees; tree; tree = tree->next, k++) {
 		HTreeRect* bounds = NULL;
-		int res = htree_tree_bounding_rect(tree, 0, &bounds);
+		if (!drawn || !drawn[k]) continue;
+		if (htree_tree_bounding_rect(tree, 0, &bounds) != HTREE_OK || !bounds) continue;
+		if (bounds->x + bounds->width + 2 * opts->node_gap > cursor) cursor = bounds->x + bounds->width + 2 * opts->node_gap;
+		htree_destroy_rect(bounds);
+	}
+	k = 0;
+	for (HTree* tree = doc->trees; tree; tree = tree->next, k++) {
+		HTreeRect* bounds = NULL;
+		int res;
+		if (drawn && drawn[k]) continue;
+		res = htree_tree_bounding_rect(tree, 0, &bounds);
 		if (res != HTREE_OK) {
 			return res;
 		}

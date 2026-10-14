@@ -557,6 +557,51 @@ by the rules above and places the machines in a row in the document
 order, two node gaps apart with their tops aligned; the comments of a
 machine travel with it.
 
+### The update
+
+`htree_update_document_geometry` lays a document out with the existing
+geometry as the seed instead of dropping it: a diagram with elements
+added without geometry is completed, not redrawn.
+
+```
+    existing geometry (the seed)                 geometry-less elements
+         |                                            |
+    P2 a transition running backward along the      joined by the DFS
+       container's flow axis is the back edge
+    P3 the layer of a drawn state = its band on      longest path from its
+       the flow axis (the bands are lower bounds)    neighbours' layers
+    P5 the order of a layer = the drawn cross        inserted by barycentre,
+       coordinates, kept among the drawn states      the sweeps move only them
+    P6 a drawn state aims at its own place above     aims at the barycentre
+       every pull, the drawn gaps are kept
+    P8 a container keeps its rect and grows when the content needs it
+    P9 a transition is re-routed when it is new or an end moved;
+       the others keep their geometry
+```
+
+The rules: the flow direction of a drawn container is inferred from its
+transitions between two drawn children (right-running against
+down-running, the regions follow their composite), a container without
+such transitions takes the preferred frame of its depth from the
+inferred root, and no frame is chosen by the content; a transition
+between two drawn elements takes no part in the layout (it keeps its
+drawn geometry) - only the transitions with a geometry-less end shape
+the layers and the order; the drawn roles are not pinned; a new band
+takes the room of its tallest vertex and shifts the later drawn bands as
+a whole by the least amount, so the drawn spacing survives; the drawn
+regions, comments and border points keep their rects and points; a
+container grows around its content by the padding and keeps its drawn
+corner, so its parent anchors the new centre; a document with several
+machines keeps the drawn ones in place and puts the new ones after their
+extent.
+
+The guarantees: on a fully drawn document the update changes nothing;
+the layer and the order of every drawn state are kept; containers never
+shrink or move on their own; the flow direction of a drawn container is
+never flipped. Test 39 covers the splice, the append, a new transition
+only, a drawn composite with a new child, a drawn column, the idempotence
+and a drawn machine beside a new one.
+
 ## The Interface
 
 The public header changes; the preserving fill-in keeps its behaviour
@@ -601,6 +646,8 @@ under a `NULL` layout:
     void htree_node_set_min_size(HTreeNode* node, double w, double h);
     int  htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
                                              const HTLayoutOptions* layout);
+    int  htree_update_document_geometry(HTDocument* doc, int reconstruct_sm,
+                                        const HTLayoutOptions* layout);
 ```
 
 A value of zero or less in the options selects the library default.

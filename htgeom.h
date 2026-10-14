@@ -249,6 +249,11 @@ typedef struct {
 	void                    htree_default_layout_options(HTLayoutOptions* opts);
 	int                     htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
 																const HTLayoutOptions* layout);
+	/* the update: the layered layout seeded by the existing geometry, which is
+	   kept - the drawn elements keep their layers and order, the geometry-less
+	   ones are inserted by the flow; NULL layout = the defaults */
+	int                     htree_update_document_geometry(HTDocument* doc, int reconstruct_sm,
+														   const HTLayoutOptions* layout);
 	int                     htree_convert_document_geometry(HTDocument* doc,
 															HTCoordFormat new_node_coord_format,
 															HTCoordFormat new_edge_coord_format,
