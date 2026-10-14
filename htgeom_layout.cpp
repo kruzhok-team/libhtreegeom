@@ -2186,6 +2186,56 @@ static int htree_layout_edge_kept(const HTLayoutContext* ctx, HTreeEdge* e)
 	return 1;
 }
 
+#define HTREE_LAYOUT_INSIDE 1.0   /* an end this far inside is not a drawing slip */
+
+static int htree_layout_point_inside(const HTreePoint* p, const HTreeRect* r, double eps)
+{
+	return p->x > r->x + eps && p->x < r->x + r->width - eps &&
+		p->y > r->y + eps && p->y < r->y + r->height - eps;
+}
+
+/* the end of a kept route inside its grown node slides along its first
+   segment to the border; 0 when the next point is not outside */
+static int htree_layout_fit_route_end(HTreePoint* end, HTreePoint next, const HTreeNode* n)
+{
+	const HTreeRect* r = n->rect;
+	double dx = next.x - end->x, dy = next.y - end->y, t = 1.0;
+	if (!r || !htree_layout_point_inside(end, r, HTREE_LAYOUT_INSIDE)) return 1;
+	if (!htree_layout_point_inside(&next, r, -HTREE_COORD_EPS)) {
+		if (dx > HTREE_COORD_EPS) t = std::min(t, (r->x + r->width - end->x) / dx);
+		if (dx < -HTREE_COORD_EPS) t = std::min(t, (r->x - end->x) / dx);
+		if (dy > HTREE_COORD_EPS) t = std::min(t, (r->y + r->height - end->y) / dy);
+		if (dy < -HTREE_COORD_EPS) t = std::min(t, (r->y - end->y) / dy);
+		end->x += t * dx;
+		end->y += t * dy;
+		return 1;
+	}
+	return 0;
+}
+
+static int htree_layout_is_ancestor(const HTreeNode* a, const HTreeNode* n)
+{
+	for (n = n ? n->parent : NULL; n; n = n->parent) {
+		if (n == a) return 1;
+	}
+	return 0;
+}
+
+/* the update: the ends of a kept route stay on the borders of their nodes
+   (a node grown by its text); 0 when the route cannot keep them */
+static int htree_layout_fit_route(HTreeEdge* e)
+{
+	const HTreePolyline* last = NULL;
+	if (htree_layout_is_ancestor(e->source, e->target) || htree_layout_is_ancestor(e->target, e->source)) return 1;
+	for (const HTreePolyline* pl = e->polyline; pl; pl = pl->next) last = pl;
+	if (e->source_point && (e->polyline || e->target_point) &&
+		!htree_layout_fit_route_end(e->source_point, e->polyline ? e->polyline->point : *e->target_point,
+									e->source)) return 0;
+	if (e->target_point && (last || e->source_point) &&
+		!htree_layout_fit_route_end(e->target_point, last ? last->point : *e->source_point, e->target)) return 0;
+	return 1;
+}
+
 static void htree_layout_drop_edge_geometry(HTreeEdge* e)
 {
 	if (e->source_point) { htree_destroy_point(e->source_point); e->source_point = NULL; }
@@ -2203,7 +2253,7 @@ static int htree_layout_route_edges(HTLayoutContext* ctx)
 			htree_node_is_comment(e->source) || htree_node_is_comment(e->target)) continue;
 		if (!(e->source->rect || e->source->point) || !(e->target->rect || e->target->point)) continue;
 		if (ctx->update) {
-			if (htree_layout_edge_kept(ctx, e)) continue;
+			if (htree_layout_edge_kept(ctx, e) && htree_layout_fit_route(e)) continue;
 			htree_layout_drop_edge_geometry(e);
 			ctx->routed.insert(e);
 		}

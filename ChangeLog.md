@@ -30,6 +30,9 @@ Fixed:
 - the update: a new state or a bend of a new transition sitting on a drawn
   route that stays moves across the flow beyond it, away from the drawn
   states of its layer; the route ran through the new state.
+- the update: a drawn route keeps its ends on the border of a state that
+  grew (its text gained lines); they stayed inside it. A route whose next
+  bend the state covers is laid out anew.
 
 ## Version 1.1.1 (unreleased)
 

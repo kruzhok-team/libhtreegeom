@@ -107,5 +107,5 @@ border). The allocating functions return NULL on failure.
   geometry-less ones are inserted by the flow (a new cycle never reverses
   the drawn order), a new container gets the title band of the full
   layout, containers only grow, the untouched transitions keep their
-  routes (moved along when both ends moved alike); a `NULL` layout takes
-  the defaults
+  routes (moved along when both ends moved alike, their ends kept on the
+  border of a grown state); a `NULL` layout takes the defaults

@@ -1,0 +1,6 @@
+=== grown ===
+update: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: 0, y: 0, w: 600, h: 400), children: [HTreeNode {id: a, rect: (x: 50, y: 50, w: 200, h: 150)}, HTreeNode {id: b, rect: (x: 350, y: 50, w: 200, h: 250)}]}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 250, y: 100), target point: (x: 350, y: 100)}, HTreeEdge {id: e-b-a, source: b, target: a, source point: (x: 450, y: 300), target point: (x: 150, y: 200), polyline: Polyline [(x: 450, y: 320), (x: 150, y: 320)]}]}], bounding rect: (x: 0, y: 0, w: 600, h: 400)}
+=== covered ===
+update: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: 0, y: 0, w: 600, h: 400), children: [HTreeNode {id: a, rect: (x: 50, y: 50, w: 200, h: 150)}, HTreeNode {id: b, rect: (x: 350, y: 50, w: 200, h: 300)}]}], edges: [HTreeEdge {id: e-a-b, source: a, target: b, source point: (x: 250, y: 100), target point: (x: 350, y: 100)}, HTreeEdge {id: e-b-a, source: b, target: a, source point: (x: 350, y: 125), target point: (x: 250, y: 125)}]}], bounding rect: (x: 0, y: 0, w: 600, h: 400)}
