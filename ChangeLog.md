@@ -6,6 +6,10 @@ Added:
 - the geometry update `htree_update_document_geometry`: the layered layout
   seeded by the existing drawing, which is kept.
 
+Fixed:
+- the update: the bends and the labels of the new transitions inside a
+  drawn container are no longer shifted twice by its origin.
+
 ## Version 1.1.1 (unreleased)
 
 Added:

@@ -1343,6 +1343,7 @@ static int htree_layout_container_forced(HTLayoutContext* ctx, int ci, HTFlowDir
 static int htree_layout_container(HTLayoutContext* ctx, int ci);
 static void htree_layout_content_bounds(const HTLayoutContext* ctx, int ci, HTreeRect* r);
 static void htree_layout_node_centre(const HTreeNode* n, HTreePoint* p);
+static void htree_layout_origin(const HTLayoutContext* ctx, int ci, double* ox, double* oy);
 
 /* P7: the regions laid out in the composite's frame, side by side across
    the flow axis, widened to the widest */
@@ -1522,17 +1523,6 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 			if (htree_layout_is_container(child)) htree_layout_place_border_points(ctx, ci, child);
 			htree_shift_subtree(child, ix, iy);
 		}
-		{
-			std::vector<HTLayoutPiece>& pieces = ctx->containers[ci].pieces;
-			for (size_t k = 0; k < pieces.size(); k++) {
-				for (size_t i = 0; i < pieces[k].bends.size(); i++) {
-					pieces[k].bends[i].x += ix;
-					pieces[k].bends[i].y += iy;
-				}
-				pieces[k].label.x += ix;
-				pieces[k].label.y += iy;
-			}
-		}
 		if (node && (!is_root || ctx->reconstruct_sm || ctx->sm_had_rect || node->rect)) {
 			htree_layout_content_bounds(ctx, ci, &bounds);
 			if (node->rect) {
@@ -1557,6 +1547,21 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 				node->rect->height = bounds.height + 2 * ctx->opts.padding;
 				if (node->rect->width < W) node->rect->width = W;
 				if (node->rect->height < H) node->rect->height = H;
+			}
+		}
+		{
+			/* the pieces stay in the container frame like in the full layout:
+			   P9 adds the final origin, so they follow a later move */
+			std::vector<HTLayoutPiece>& pieces = ctx->containers[ci].pieces;
+			double ox, oy;
+			htree_layout_origin(ctx, ci, &ox, &oy);
+			for (size_t k = 0; k < pieces.size(); k++) {
+				for (size_t i = 0; i < pieces[k].bends.size(); i++) {
+					pieces[k].bends[i].x += ix - ox;
+					pieces[k].bends[i].y += iy - oy;
+				}
+				pieces[k].label.x += ix - ox;
+				pieces[k].label.y += iy - oy;
 			}
 		}
 		if (node && node->rect && ctx->seeds.find(node) != ctx->seeds.end()) {

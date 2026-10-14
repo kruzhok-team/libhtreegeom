@@ -146,6 +146,13 @@ static inline int lc_edge_chain(const HTreeEdge* e, HTreePoint* buf, int max)
 
 /* the checks */
 
+static inline int lc_same_rect(const HTreeRect* r, double x, double y, double w, double h)
+{
+	return r && fabs(r->x - x) < LC_EPS && fabs(r->y - y) < LC_EPS &&
+		fabs(r->width - w) < LC_EPS && fabs(r->height - h) < LC_EPS;
+}
+
+
 static inline double lc_orient(HTreePoint a, HTreePoint b, HTreePoint c)
 {
 	return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
