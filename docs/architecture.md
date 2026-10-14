@@ -134,7 +134,9 @@ source/target point becomes the perpendicular foot of its state center
 on the edge's outgoing line - (0,0) in the center-relative frame when
 the edge aims at the center), then edge points, then nodes
 children-first, then the bounding rect itself. Polyline points are always relative to the source
-node. A special case ("the yEd hack") binds edge labels to the edge
+node. A label rect in the local-center format is its center relative to
+the source center (relative to the point for a point source); in the
+left-top format it is its left-top corner relative to the source's. A special case ("the yEd hack") binds edge labels to the edge
 source point instead of the source node for the
 absolute/local-center/absolute/`edgeCenter` format combination.
 

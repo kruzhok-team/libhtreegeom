@@ -367,9 +367,15 @@ static int htree_convert_rect_geometry_to_absolute(HTreeRect* rect,
 	if (parent == NULL) { // no parent
 		return HTREE_OK;
 	}
-	rect->x += parent->x;
-	rect->y += parent->y;		
-
+	if (format == coordLeftTop) {
+		rect->x += parent->x;
+		rect->y += parent->y;
+	} else {
+		/* coordLocalCenter: the rect centre relative to the point, like the
+		   centre relative to the centre of a rect parent */
+		rect->x += parent->x - rect->width / 2.0;
+		rect->y += parent->y - rect->height / 2.0;
+	}
 	return HTREE_OK;
 }
 
@@ -1018,9 +1024,14 @@ static int htree_convert_rect_geometry_to_format(HTreeRect* rect,
 	if (parent == NULL) { // no parent
 		return HTREE_OK;
 	}
-	rect->x -= parent->x;
-	rect->y -= parent->y;		
-
+	if (new_format == coordLeftTop) {
+		rect->x -= parent->x;
+		rect->y -= parent->y;
+	} else {
+		/* coordLocalCenter: the rect centre relative to the point */
+		rect->x -= parent->x - rect->width / 2.0;
+		rect->y -= parent->y - rect->height / 2.0;
+	}
 	return HTREE_OK;
 }
 

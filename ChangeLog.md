@@ -1,5 +1,15 @@
 # libhtgeom project changelog
 
+## Version 1.1.1 (unreleased)
+
+Added:
+- a document with several machines: every machine gets its border and the
+  machines are placed in a row.
+
+Fixed:
+- the label rect of a transition from a point is centre-based in the
+  local-centre format like the others.
+
 ## Version 1.1.0
 
 Added:
@@ -9,8 +19,6 @@ Added:
 - the layout options (`HTLayoutOptions`, `htree_default_layout_options`);
 - the adaptive flow direction (`HTLayoutMode`, the target aspect ratio): the
   machine level prefers left-to-right, the content chooses the frame;
-- a document with several machines: every machine gets its border and the
-  machines are placed in a row;
 - `htree_reconstruct_document_geometry` takes the layout options instead
   of the ordering flag (`NULL` keeps the preserving fill-in);
 
