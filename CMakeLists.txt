@@ -113,6 +113,12 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ChangeLog.md
 	      DESTINATION share/doc/libhtreegeom
 	      COMPONENT runtime)
 
+# the machine-readable (DEP-5) copyright, where the Debian policy wants it
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/debian-copyright
+	      DESTINATION share/doc/libhtreegeom RENAME copyright COMPONENT runtime)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/debian-copyright
+	      DESTINATION share/doc/libhtreegeom-dev RENAME copyright COMPONENT dev)
+
 configure_file ("${PROJECT_SOURCE_DIR}/HTreeCPackOptions.cmake.in"
                 "${PROJECT_BINARY_DIR}/HTreeCPackOptions.cmake"
                 @ONLY)

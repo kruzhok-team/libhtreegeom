@@ -1,0 +1,58 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: libhtreegeom
+Upstream-Contact: Alexey Fedoseev <aleksey@fedoseev.net>
+Source: https://github.com/kruzhok-team/libhtreegeom
+
+Files: *
+Copyright: 2024-2026 Alexey Fedoseev <aleksey@fedoseev.net>
+License: LGPL-3+
+
+Files: htgeom_test.cpp
+Copyright: 2024 Alexey Fedoseev <aleksey@fedoseev.net>
+License: GPL-3+
+
+Files: homog2d.hpp
+ homog2d/*
+Copyright: 2019-2025 Sebastien Kramm
+License: MPL-2.0
+Comment: The header-only library homog2d (https://github.com/skramm/homog2d),
+ placed in the source tree before the build and compiled into
+ libhtgeom; its header is not installed.
+
+License: LGPL-3+
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation; either version 3 of the License, or (at your
+ option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but WITHOUT
+ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+ for more details.
+ .
+ On Debian systems, the complete text of the GNU Lesser General Public
+ License version 3 can be found in "/usr/share/common-licenses/LGPL-3", and
+ the GNU General Public License version 3 it supplements in
+ "/usr/share/common-licenses/GPL-3".
+
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify it
+ under the terms of the GNU General Public License as published by the Free
+ Software Foundation, either version 3 of the License, or (at your option)
+ any later version.
+ .
+ This program is distributed in the hope that it will be useful, but WITHOUT
+ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ more details.
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 3 can be found in "/usr/share/common-licenses/GPL-3".
+
+License: MPL-2.0
+ This Source Code Form is subject to the terms of the Mozilla Public
+ License, v. 2.0. If a copy of the MPL was not distributed with this
+ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ .
+ On Debian systems, the complete text of the Mozilla Public License
+ version 2.0 can be found in "/usr/share/common-licenses/MPL-2.0".
