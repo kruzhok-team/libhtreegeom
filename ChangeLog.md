@@ -1,40 +1,16 @@
 # libhtgeom project changelog
 
-## Version 1.2.0 (unreleased)
+## Version 1.2.0
 
 Added:
 - the geometry update `htree_update_document_geometry`: the layered layout
   seeded by the existing drawing, which is kept.
 
 Fixed:
-- the update: the bends and the labels of the new transitions inside a
-  drawn container are no longer shifted twice by its origin.
-- the update: a new container and a new region get the title band and the
-  insets of the full layout.
-- the update: the drawn vertices stay pinned when new vertices or bends
-  share their layer, and a new line through a drawn layer runs along the
-  whole band instead of cutting the corner of a drawn neighbour.
-- the update: a new state that closes a cycle through the drawing is placed
-  after it, the new edge back is the reversed one; a new transition between
-  drawn states of different bands is routed around the states between them.
-- the entry and exit points of a machine (not of a nested state) are laid
-  out as vertices of the machine; they had no geometry.
-- the update: a region without a rect whose vertices are drawn (the
-  implicit region of a drawn composite) keeps its place; it was moved like a
-  new region, and the drawing of a composite with it moved.
-- the update: a new labelled transition between two drawn states takes no
-  label layer, which pushed the drawn target; its label goes beside the line.
-- the update: a drawn transition whose ends moved by one offset (a drawn
-  group put into a new container) moves with them; it was re-routed as a
-  straight line.
-- the update: a new state or a bend of a new transition sitting on a drawn
-  route that stays moves across the flow beyond it, away from the drawn
-  states of its layer; the route ran through the new state.
-- the update: a drawn route keeps its ends on the border of a state that
-  grew (its text gained lines); they stayed inside it. A route whose next
-  bend the state covers is laid out anew.
+- multiple reconstruction algorithm updates;
+- correct the entry and exit points geometry.
 
-## Version 1.1.1 (unreleased)
+## Version 1.1.1
 
 Added:
 - a document with several machines: every machine gets its border and the
