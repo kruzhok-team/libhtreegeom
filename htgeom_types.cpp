@@ -512,6 +512,30 @@ void htree_edge_set_points(HTreeEdge* edge, float source_x, float source_y, floa
 	}
 }
 
+void htree_edge_set_link(HTreeEdge* edge, HTEdgeType type, const char* target_edge_id)
+{
+	if (!edge) return ;
+	edge->type = type;
+	if (edge->target_edge_id) {
+		free(edge->target_edge_id);
+		edge->target_edge_id = NULL;
+		edge->target_edge_id_len = 0;
+	}
+	if (target_edge_id) {
+		htree_copy_string(&(edge->target_edge_id), &(edge->target_edge_id_len), target_edge_id);
+	}
+}
+
+HTreeEdge* htree_find_edge_by_id(HTreeEdge* edges, const char* id)
+{
+	for (; edges && id; edges = edges->next) {
+		if (edges->id && strcmp(edges->id, id) == 0) {
+			return edges;
+		}
+	}
+	return NULL;
+}
+
 HTreeEdge* htree_copy_edge(const HTreeEdge* src)
 {
 	HTreeEdge* dst;
@@ -519,6 +543,7 @@ HTreeEdge* htree_copy_edge(const HTreeEdge* src)
 		return NULL;
 	}
 	dst = htree_new_edge(src->id, src->source_id, src->target_id);
+	htree_edge_set_link(dst, src->type, src->target_edge_id);
 /*	if (src->abs_source_rect) {
 		dst->abs_source_rect = htree_copy_rect(src->abs_source_rect);
 	}
@@ -551,6 +576,7 @@ int htree_destroy_edge(HTreeEdge* e)
 	if (e->id) free(e->id);
 	if (e->source_id) free(e->source_id);
 	if (e->target_id) free(e->target_id);
+	if (e->target_edge_id) free(e->target_edge_id);
 //	if (e->abs_source_rect) free(e->abs_source_rect);
 //	if (e->abs_target_rect) free(e->abs_target_rect);
 	if (e->polyline) {
@@ -652,6 +678,7 @@ HTree* htree_copy_tree(const HTree* src)
 			}
 			edge->source = source;
 			edge->target = target;
+			edge->target_edge = htree_find_edge_by_id(dst->edges, edge->target_edge_id);
 			edge = edge->next;
 		}
 

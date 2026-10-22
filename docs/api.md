@@ -61,6 +61,11 @@ border). The allocating functions return NULL on failure.
 * `htree_new_edge(id, source_id, target_id)` - allocate an edge; the caller
   resolves the `source`/`target` node pointers
 * `htree_edge_set_points(edge, sx, sy, tx, ty)` - set the end points
+* `htree_edge_set_link(edge, type, target_edge_id)` - mark a comment link
+  (`htEdgeLink`, `htEdgeChunkLink` for a fragment); a link to a transition
+  names it, its target node is the transition's source; the caller resolves
+  `target_edge`, a tree copy resolves it by the id
+* `htree_find_edge_by_id(edges, id)` - search an edge list
 * `htree_copy_edge(src)` / `htree_destroy_edge(edge)` - copy / free
 
 ## Trees Module

@@ -96,6 +96,15 @@ typedef struct _HTreeNode {
     HTreeRect*              min_rect;      /* the preset minimum size (x, y ignored) */
 } HTreeNode;
 
+/* the kind of an edge: a transition or a comment link from a comment node;
+   a link to an element gets both ends, a link to a fragment no target point,
+   a link to an edge ends on the path of that edge (PNST 1044 9.1.1) */
+typedef enum {
+	htEdgeTransition = 0,
+	htEdgeLink = 1,
+	htEdgeChunkLink = 2
+} HTEdgeType;
+
 typedef struct _HTreeEdge {
     char*                   id;
     size_t                  id_len;
@@ -111,6 +120,10 @@ typedef struct _HTreeEdge {
     HTreePoint*             label_point;
     HTreeRect*              label_rect;
     struct _HTreeEdge*      next;
+    HTEdgeType              type;               /* the edge kind */
+    char*                   target_edge_id;     /* a link to an edge: the commented edge, */
+    size_t                  target_edge_id_len; /* its target node is the edge's source  */
+    struct _HTreeEdge*      target_edge;
 } HTreeEdge;
 
 typedef struct _HTree {
@@ -226,6 +239,9 @@ typedef struct {
 
 	HTreeEdge*              htree_new_edge(const char* _id, const char* source_id, const char* target_id);
 	void                    htree_edge_set_points(HTreeEdge* edge, float source_x, float source_y, float target_x, float target_y);
+	/* the kind of a comment link, and the commented edge of a link to an edge */
+	void                    htree_edge_set_link(HTreeEdge* edge, HTEdgeType type, const char* target_edge_id);
+	HTreeEdge*              htree_find_edge_by_id(HTreeEdge* edges, const char* id);
 	HTreeEdge*              htree_copy_edge(const HTreeEdge* src);
 	int                     htree_destroy_edge(HTreeEdge* edge);
 

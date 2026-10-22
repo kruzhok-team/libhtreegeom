@@ -545,7 +545,28 @@ A comment linked to an element is placed beside that element on its
 free side (the cross-axis end with no neighbour, else after the last
 layer), with the `NODE_GAP`; an unlinked comment is shelf-placed after
 the content of its container. Comments enlarge neither the containers
-nor the SM border (the 1.0.6 rule) and their links are not routed.
+nor the SM border (the 1.0.6 rule).
+
+The links of the placed comments get straight ends (PNST 1044 9.1.1):
+
+```
+  link to an element        link to a transition          link to a fragment
+  ┌───────┐                 ┌───┐  t   ┌───┐              ┌───────┐
+  │comment├ - - - ■┌─────┐  │ a ├──■──>│ b │              │comment├ - - - ┌─────┐
+  └───────┘        │  b  │  └───┘  ¦   └───┘              └───────┘       │  b  │
+   source on the   └─────┘    ┌────┴──┐                    source only,   └─────┘
+   comment border,            │comment│                    no target point
+   target on b toward it      └───────┘
+                              target on the path of t, nearest to the comment,
+                              a quarter of the end segments kept free; its frame
+                              is the source node a of t
+```
+
+The edge kind is `HTreeEdge::type` (`htEdgeLink`, `htEdgeChunkLink`; an
+untyped edge from a comment counts as a link to an element) and the
+commented transition is `target_edge`, set by `htree_edge_set_link`. The
+preserving reconstruction attaches the links after the transitions in the
+same way; neither moves a stored end.
 
 ### Several machines
 
@@ -621,7 +642,9 @@ container, the title band of a new container, the pinned drawn states
 with the lines along the drawn bands, and the new cycles; test 45 the
 implicit region of a drawn composite; test 46 a drawn group put into a new
 container with its routes; test 47 a new state and a bend kept off a drawn
-route; test 48 the ends of a drawn route on a grown state.
+route; test 48 the ends of a drawn route on a grown state. A drawn comment
+link whose ends stay (or move together) and whose commented transition is
+not routed again keeps its ends, only the missing ones are filled; test 50.
 
 ## The Interface
 
@@ -732,7 +755,7 @@ on the result before printing it:
   child composite `DOWN`, the alternation off, the `RIGHT` root;
 * 33 the preset sizes: a min rect never shrunk, a wide title block
   widening its composite, the content centred;
-* 34 comments: beside the linked element, the link unrouted, the
+* 34 comments: beside the linked element, the link attached, the
   unlinked comment on the shelf;
 * 35 the degenerate documents: empty, points only, a single state, loops
   only, cycles without roles, parallel edges, no root rect, a submachine
@@ -743,7 +766,10 @@ on the result before printing it:
   a wide diamond takes the squarer one, the fixed mode, the option checks;
 * 39-43, 45-48 the update (see The update);
 * 44 the entry and exit points of a machine in the full layout and in the
-  update.
+  update;
+* 49 the comment links to a state, to a transition and to a fragment in the
+  preserving and the layered reconstruction, the copy, the Qt frame;
+* 50 the update of the comment links: kept, filled, idempotent.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness

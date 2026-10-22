@@ -1,5 +1,14 @@
 # libhtgeom project changelog
 
+## Version 1.3.0 (unreleased)
+
+Added:
+- the comment links: the edge kind `HTEdgeType` and the commented edge of a link
+  to a transition (`htree_edge_set_link`, `htree_find_edge_by_id`); the
+  reconstruction attaches the links to the borders, a link to a transition on its
+  path, a link to a fragment without a target point (PNST 1044 9.1.1); the update
+  keeps the drawn links and fills only the missing ends.
+
 ## Version 1.2.0
 
 Added:

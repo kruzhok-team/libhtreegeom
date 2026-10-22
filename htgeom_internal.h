@@ -35,6 +35,8 @@ void htree_shift_subtree(HTreeNode* node, double dx, double dy);
 int  htree_node_box(const HTreeNode* node, double* x, double* y, double* w, double* h);
 int  htree_attach_edge_minimal(HTreeEdge* edge);
 int  htree_project_edge_to_borders(HTreeEdge* edge);
+/* the missing ends of a comment link, the stored ones kept */
+int  htree_attach_link(HTreeEdge* edge);
 /* the side loop of a self-transition: on the right border, or on the bottom one */
 int  htree_reconstruct_edge_loop(HTreeEdge* edge, int bottom_side);
 int  htree_grow_sm_border(HTree* tree);

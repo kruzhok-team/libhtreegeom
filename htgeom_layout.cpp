@@ -2375,6 +2375,25 @@ static void htree_layout_place_comments(HTLayoutContext* ctx, HTreeNode* nodes)
 	}
 }
 
+/* the comment links, once the comments are placed: the reconstruction attaches
+   them anew; the update keeps a drawn link whose ends did not move (or moved
+   together) and whose commented edge was not routed again, and fills only its
+   missing ends */
+static int htree_layout_attach_links(HTLayoutContext* ctx)
+{
+	for (HTreeEdge* e = ctx->tree->edges; e; e = e->next) {
+		int res;
+		if (!e->source || !e->target || !htree_node_is_comment(e->source)) continue;
+		if (ctx->update && !(htree_layout_edge_kept(ctx, e) &&
+							 (!e->target_edge || ctx->routed.find(e->target_edge) == ctx->routed.end()))) {
+			htree_layout_drop_edge_geometry(e);
+		}
+		res = htree_attach_link(e);
+		if (res != HTREE_OK) return res;
+	}
+	return HTREE_OK;
+}
+
 /* -----------------------------------------------------------------------------
  * The tree layout
  * ----------------------------------------------------------------------------- */
@@ -2445,6 +2464,8 @@ static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayou
 	res = htree_layout_route_edges(&ctx);
 	if (res != HTREE_OK) return res;
 	htree_layout_place_comments(&ctx, tree->nodes);
+	res = htree_layout_attach_links(&ctx);
+	if (res != HTREE_OK) return res;
 	res = htree_grow_sm_border(tree);
 	if (res != HTREE_OK) return res;
 	htree_layout_final_shape(&ctx, w, h);

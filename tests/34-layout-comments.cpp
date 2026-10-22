@@ -47,7 +47,10 @@ int main(void)
 	lc_check(c1->rect && a->rect && fabs(c1->rect->x - (a->rect->x + a->rect->width + opts.node_gap)) < LC_EPS &&
 			 fabs(c1->rect->y - a->rect->y) < LC_EPS, "the comment beside its element", "c1");
 	lc_check(c1->rect && b->rect && !lc_rects_overlap(c1->rect, b->rect), "no overlap with b", "c1");
-	lc_check(!link->source_point && !link->target_point && !link->polyline, "the link unrouted", "l-c1-a");
+	lc_check(link->source_point && link->target_point && !link->polyline &&
+			 fabs(link->source_point->x - c1->rect->x) < LC_EPS &&
+			 fabs(link->target_point->x - (a->rect->x + a->rect->width)) < LC_EPS,
+			 "the link attached: c1 left border to a right border", "l-c1-a");
 	lc_check(c2->rect && b->rect && c2->rect->y >= b->rect->y + b->rect->height + opts.node_gap - LC_EPS,
 			 "the unlinked comment on the shelf", "c2");
 	lc_check(lc_check_containment(sm, opts.padding) == 0, "containment", "sm");

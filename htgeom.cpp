@@ -793,6 +793,119 @@ int htree_project_edge_to_borders(HTreeEdge* edge)
 	return HTREE_OK;
 }
 
+static int htree_node_centre(const HTreeNode* n, HTreePoint* p)
+{
+	if (n->rect) {
+		p->x = n->rect->x + n->rect->width / 2.0;
+		p->y = n->rect->y + n->rect->height / 2.0;
+		return 1;
+	}
+	if (n->point) {
+		*p = *n->point;
+		return 1;
+	}
+	return 0;
+}
+
+/* the border point of a node on the way from its centre toward p: a point
+   node is its own end, a rect overlapping p keeps the centre */
+static void htree_border_toward(const HTreeNode* n, const HTreePoint* toward, HTreePoint* result)
+{
+	htree_node_centre(n, result);
+	if (!n->rect || (std::fabs(toward->x - result->x) < HTREE_COORD_EPS &&
+					 std::fabs(toward->y - result->y) < HTREE_COORD_EPS)) {
+		return;
+	}
+	auto res = h2d::SegmentD(htree_point_to_homog(result), htree_point_to_homog(toward))
+		.intersects(htree_rect_to_homog(n->rect));
+	if (res() && res.get().size() >= 1) {
+		homog_point_to_htree(res.get().front(), *result);
+	}
+}
+
+#define HTREE_LINK_END_MARGIN 0.25   /* a link foot keeps this part of the end segments free */
+
+/* the point of the path of an edge nearest to p, off the ends of the path
+   (the arrow); an end without a stored point is the centre of its node */
+static int htree_edge_path_nearest(const HTreeEdge* e, const HTreePoint* p, HTreePoint* result)
+{
+	std::vector<HTreePoint> path;
+	HTreePoint c;
+	double best = -1.0;
+
+	if (!e->source || !e->target) return 0;
+	if (e->source_point) path.push_back(*e->source_point);
+	else if (htree_node_centre(e->source, &c)) path.push_back(c);
+	else return 0;
+	for (const HTreePolyline* pl = e->polyline; pl; pl = pl->next) path.push_back(pl->point);
+	if (e->target_point) path.push_back(*e->target_point);
+	else if (htree_node_centre(e->target, &c)) path.push_back(c);
+	else return 0;
+	for (size_t i = 0; i + 1 < path.size(); i++) {
+		const HTreePoint& a = path[i];
+		const HTreePoint& b = path[i + 1];
+		double dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy, t = 0.0, d;
+		HTreePoint q;
+		double lo = i == 0 ? HTREE_LINK_END_MARGIN : 0.0;
+		double hi = i + 2 == path.size() ? 1.0 - HTREE_LINK_END_MARGIN : 1.0;
+		if (len2 > HTREE_COORD_EPS) {
+			t = ((p->x - a.x) * dx + (p->y - a.y) * dy) / len2;
+		}
+		t = t < lo ? lo : (t > hi ? hi : t);
+		q.x = a.x + t * dx;
+		q.y = a.y + t * dy;
+		d = (q.x - p->x) * (q.x - p->x) + (q.y - p->y) * (q.y - p->y);
+		if (best < 0.0 || d < best) {
+			best = d;
+			*result = q;
+		}
+	}
+	return best >= 0.0;
+}
+
+/* The missing ends of a comment link (absolute, on the borders): the source
+   on the comment border, the target on the element border, on the path of
+   the commented edge, or none for a fragment (PNST 1044 9.1.1); the stored
+   ends stay */
+int htree_attach_link(HTreeEdge* edge)
+{
+	HTreePoint centre, anchor, from, p;
+	const HTreePolyline* last = NULL;
+
+	if (!edge || !edge->source || !edge->target) {
+		return HTREE_BAD_PARAMETER;
+	}
+	if (!htree_node_centre(edge->source, &centre) || !htree_node_centre(edge->target, &anchor)) {
+		return HTREE_OK;
+	}
+	for (const HTreePolyline* pl = edge->polyline; pl; pl = pl->next) last = pl;
+	if (edge->type == htEdgeChunkLink) {
+		if (edge->target_point) {
+			htree_destroy_point(edge->target_point);
+			edge->target_point = NULL;
+		}
+	} else if (edge->target_point) {
+		anchor = *edge->target_point;
+	} else if (edge->target_edge) {
+		if (!htree_edge_path_nearest(edge->target_edge, last ? &(last->point) : &centre, &anchor)) {
+			return HTREE_OK;
+		}
+		edge->target_point = htree_new_point();
+		*edge->target_point = anchor;
+	} else {
+		from = last ? last->point : (edge->source_point ? *edge->source_point : centre);
+		htree_border_toward(edge->target, &from, &anchor);
+		edge->target_point = htree_new_point();
+		*edge->target_point = anchor;
+	}
+	if (!edge->source_point) {
+		htree_border_toward(edge->source, edge->polyline ? &(edge->polyline->point) : &anchor, &p);
+		edge->source_point = htree_new_point();
+		*edge->source_point = p;
+	}
+	return HTREE_OK;
+}
+
 static int htree_convert_edges_geometry_to_absolute_borders(HTDocument* doc)
 {
 	if (!doc) {
@@ -1729,8 +1842,7 @@ int htree_reconstruct_edge_loop(HTreeEdge* edge, int bottom_side)
 static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 {
 	for (HTreeEdge* edge = edges; edge; edge = edge->next) {
-		/* a comment link attaches to its element; a fragment link must carry no
-		   target point (9.1), so the reconstruction leaves comment links alone */
+		/* the comment links follow, on the attached transitions */
 		if (edge->source && edge->source->type == htComment) {
 			continue;
 		}
@@ -1746,6 +1858,14 @@ static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 			htree_reconstruct_edge_loop(edge, 0);
 		} else if (!htree_attach_edge_minimal(edge)) {
 			int res = htree_project_edge_to_borders(edge);
+			if (res != HTREE_OK) {
+				return res;
+			}
+		}
+	}
+	for (HTreeEdge* edge = edges; edge; edge = edge->next) {
+		if (edge->source && edge->source->type == htComment && edge->target) {
+			int res = htree_attach_link(edge);
 			if (res != HTREE_OK) {
 				return res;
 			}

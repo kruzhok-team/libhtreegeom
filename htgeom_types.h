@@ -131,6 +131,14 @@ inline std::ostream& operator<<(std::ostream& os, const HTreeEdge* edge)
 		os << "id: " << edge->id << ", ";
 		os << "source: " << edge->source_id << ", ";
 		os << "target: " << edge->target_id;
+		if (edge->type == htEdgeLink) {
+			os << ", link";
+		} else if (edge->type == htEdgeChunkLink) {
+			os << ", chunk link";
+		}
+		if (edge->target_edge_id) {
+			os << " to edge " << edge->target_edge_id;
+		}
 		if (edge->source_point) {
 			os << ", source point: " << edge->source_point; 
 		}
