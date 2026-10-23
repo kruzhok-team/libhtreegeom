@@ -112,6 +112,20 @@ int main(void)
 	htree_print_document(doc);
 	htree_destroy_document(doc);
 
+	/* a label over the nearest point: the foot keeps to its border, off the arrow */
+	doc = build(&tree, &b, &c, &ab, &to_b, &to_ab, &chunk);
+	ab->label_rect = htree_new_rect();
+	ab->label_rect->x = 320;
+	ab->label_rect->y = 140;
+	ab->label_rect->width = 60;
+	ab->label_rect->height = 20;
+	printf("=== label ===\n");
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, NULL));
+	lc_check(to_ab->target_point && fabs(to_ab->target_point->x - 380) < LC_EPS &&
+			 fabs(to_ab->target_point->y - 150) < LC_EPS, "the foot beside the label", "label");
+	htree_print_document(doc);
+	htree_destroy_document(doc);
+
 	/* the layered layout attaches the links after placing the comment */
 	doc = build(&tree, &b, &c, &ab, &to_b, &to_ab, &chunk);
 	htree_default_layout_options(&opts);

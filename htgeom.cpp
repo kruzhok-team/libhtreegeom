@@ -825,9 +825,36 @@ static void htree_border_toward(const HTreeNode* n, const HTreePoint* toward, HT
 
 #define HTREE_LINK_END_MARGIN 0.25   /* a link foot keeps this part of the end segments free */
 
+static int htree_point_inside_rect(const HTreePoint* p, const HTreeRect* r)
+{
+	return p->x > r->x + HTREE_COORD_EPS && p->x < r->x + r->width - HTREE_COORD_EPS &&
+		p->y > r->y + HTREE_COORD_EPS && p->y < r->y + r->height - HTREE_COORD_EPS;
+}
+
+/* a candidate foot at t of the segment a + t * d, when it lies within [lo, hi]
+   and off the avoided rect */
+static void htree_foot_candidate(const HTreePoint& a, double dx, double dy, double t,
+								 double lo, double hi, const HTreePoint* p,
+								 const HTreeRect* avoid, double* best, HTreePoint* result)
+{
+	HTreePoint q;
+	double d;
+	if (t < lo - HTREE_COORD_EPS || t > hi + HTREE_COORD_EPS) return;
+	q.x = a.x + t * dx;
+	q.y = a.y + t * dy;
+	if (avoid && htree_point_inside_rect(&q, avoid)) return;
+	d = (q.x - p->x) * (q.x - p->x) + (q.y - p->y) * (q.y - p->y);
+	if (*best < 0.0 || d < *best) {
+		*best = d;
+		*result = q;
+	}
+}
+
 /* the point of the path of an edge nearest to p, off the ends of the path
-   (the arrow); an end without a stored point is the centre of its node */
-static int htree_edge_path_nearest(const HTreeEdge* e, const HTreePoint* p, HTreePoint* result)
+   (the arrow) and off its label rect when one is given; an end without a
+   stored point is the centre of its node */
+static int htree_edge_path_nearest(const HTreeEdge* e, const HTreePoint* p,
+								   const HTreeRect* avoid, HTreePoint* result)
 {
 	std::vector<HTreePoint> path;
 	HTreePoint c;
@@ -844,21 +871,30 @@ static int htree_edge_path_nearest(const HTreeEdge* e, const HTreePoint* p, HTre
 	for (size_t i = 0; i + 1 < path.size(); i++) {
 		const HTreePoint& a = path[i];
 		const HTreePoint& b = path[i + 1];
-		double dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy, t = 0.0, d;
-		HTreePoint q;
+		double dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy, t = 0.0;
 		double lo = i == 0 ? HTREE_LINK_END_MARGIN : 0.0;
 		double hi = i + 2 == path.size() ? 1.0 - HTREE_LINK_END_MARGIN : 1.0;
 		if (len2 > HTREE_COORD_EPS) {
 			t = ((p->x - a.x) * dx + (p->y - a.y) * dy) / len2;
 		}
 		t = t < lo ? lo : (t > hi ? hi : t);
-		q.x = a.x + t * dx;
-		q.y = a.y + t * dy;
-		d = (q.x - p->x) * (q.x - p->x) + (q.y - p->y) * (q.y - p->y);
-		if (best < 0.0 || d < best) {
-			best = d;
-			*result = q;
+		htree_foot_candidate(a, dx, dy, t, lo, hi, p, avoid, &best, result);
+		if (!avoid) continue;
+		/* the nearest point under the label: its border crossings and the ends */
+		htree_foot_candidate(a, dx, dy, lo, lo, hi, p, avoid, &best, result);
+		htree_foot_candidate(a, dx, dy, hi, lo, hi, p, avoid, &best, result);
+		if (std::fabs(dx) > HTREE_COORD_EPS) {
+			htree_foot_candidate(a, dx, dy, (avoid->x - a.x) / dx, lo, hi, p, avoid, &best, result);
+			htree_foot_candidate(a, dx, dy, (avoid->x + avoid->width - a.x) / dx, lo, hi, p, avoid, &best, result);
 		}
+		if (std::fabs(dy) > HTREE_COORD_EPS) {
+			htree_foot_candidate(a, dx, dy, (avoid->y - a.y) / dy, lo, hi, p, avoid, &best, result);
+			htree_foot_candidate(a, dx, dy, (avoid->y + avoid->height - a.y) / dy, lo, hi, p, avoid, &best, result);
+		}
+	}
+	if (best < 0.0 && avoid) {
+		/* the whole path under the label */
+		return htree_edge_path_nearest(e, p, NULL, result);
 	}
 	return best >= 0.0;
 }
@@ -887,7 +923,9 @@ int htree_attach_link(HTreeEdge* edge)
 	} else if (edge->target_point) {
 		anchor = *edge->target_point;
 	} else if (edge->target_edge) {
-		if (!htree_edge_path_nearest(edge->target_edge, last ? &(last->point) : &centre, &anchor)) {
+		const HTreeRect* label = edge->target_edge->label_rect;
+		if (label && (label->width <= 0.0 || label->height <= 0.0)) label = NULL;
+		if (!htree_edge_path_nearest(edge->target_edge, last ? &(last->point) : &centre, label, &anchor)) {
 			return HTREE_OK;
 		}
 		edge->target_point = htree_new_point();

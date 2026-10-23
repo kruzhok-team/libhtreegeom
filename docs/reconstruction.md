@@ -558,8 +558,8 @@ The links of the placed comments get straight ends (PNST 1044 9.1.1):
    comment border,            │comment│                    no target point
    target on b toward it      └───────┘
                               target on the path of t, nearest to the comment,
-                              a quarter of the end segments kept free; its frame
-                              is the source node a of t
+                              a quarter of the end segments and the label box
+                              kept free; its frame is the source node a of t
 ```
 
 The edge kind is `HTreeEdge::type` (`htEdgeLink`, `htEdgeChunkLink`; an
@@ -768,7 +768,8 @@ on the result before printing it:
 * 44 the entry and exit points of a machine in the full layout and in the
   update;
 * 49 the comment links to a state, to a transition and to a fragment in the
-  preserving and the layered reconstruction, the copy, the Qt frame;
+  preserving and the layered reconstruction, the copy, the Qt frame, the foot
+  beside the label of the transition;
 * 50 the update of the comment links: kept, filled, idempotent.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
