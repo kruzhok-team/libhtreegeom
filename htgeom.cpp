@@ -850,11 +850,11 @@ static void htree_foot_candidate(const HTreePoint& a, double dx, double dy, doub
 	}
 }
 
-/* the point of the path of an edge nearest to p, off the ends of the path
-   (the arrow) and off its label rect when one is given; an end without a
-   stored point is the centre of its node */
+/* the point of the path of an edge nearest to p, off the margin of the end
+   segments (the arrow) and off its label rect when one is given; an end
+   without a stored point is the centre of its node */
 static int htree_edge_path_nearest(const HTreeEdge* e, const HTreePoint* p,
-								   const HTreeRect* avoid, HTreePoint* result)
+								   const HTreeRect* avoid, double margin, HTreePoint* result)
 {
 	std::vector<HTreePoint> path;
 	HTreePoint c;
@@ -872,8 +872,8 @@ static int htree_edge_path_nearest(const HTreeEdge* e, const HTreePoint* p,
 		const HTreePoint& a = path[i];
 		const HTreePoint& b = path[i + 1];
 		double dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy, t = 0.0;
-		double lo = i == 0 ? HTREE_LINK_END_MARGIN : 0.0;
-		double hi = i + 2 == path.size() ? 1.0 - HTREE_LINK_END_MARGIN : 1.0;
+		double lo = i == 0 ? margin : 0.0;
+		double hi = i + 2 == path.size() ? 1.0 - margin : 1.0;
 		if (len2 > HTREE_COORD_EPS) {
 			t = ((p->x - a.x) * dx + (p->y - a.y) * dy) / len2;
 		}
@@ -893,8 +893,9 @@ static int htree_edge_path_nearest(const HTreeEdge* e, const HTreePoint* p,
 		}
 	}
 	if (best < 0.0 && avoid) {
-		/* the whole path under the label */
-		return htree_edge_path_nearest(e, p, NULL, result);
+		/* the label covers the free middle: beside it, else the plain nearest */
+		if (margin > 0.0 && htree_edge_path_nearest(e, p, avoid, 0.0, result)) return 1;
+		return htree_edge_path_nearest(e, p, NULL, margin, result);
 	}
 	return best >= 0.0;
 }
@@ -925,7 +926,8 @@ int htree_attach_link(HTreeEdge* edge)
 	} else if (edge->target_edge) {
 		const HTreeRect* label = edge->target_edge->label_rect;
 		if (label && (label->width <= 0.0 || label->height <= 0.0)) label = NULL;
-		if (!htree_edge_path_nearest(edge->target_edge, last ? &(last->point) : &centre, label, &anchor)) {
+		if (!htree_edge_path_nearest(edge->target_edge, last ? &(last->point) : &centre, label,
+									 HTREE_LINK_END_MARGIN, &anchor)) {
 			return HTREE_OK;
 		}
 		edge->target_point = htree_new_point();

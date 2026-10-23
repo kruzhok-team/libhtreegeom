@@ -126,6 +126,20 @@ int main(void)
 	htree_print_document(doc);
 	htree_destroy_document(doc);
 
+	/* a label over the whole free middle: the foot beside it, inside the margin */
+	doc = build(&tree, &b, &c, &ab, &to_b, &to_ab, &chunk);
+	ab->label_rect = htree_new_rect();
+	ab->label_rect->x = 335;
+	ab->label_rect->y = 140;
+	ab->label_rect->width = 130;
+	ab->label_rect->height = 20;
+	printf("=== wide label ===\n");
+	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(doc, 0, NULL));
+	lc_check(to_ab->target_point && fabs(to_ab->target_point->x - 335) < LC_EPS &&
+			 fabs(to_ab->target_point->y - 150) < LC_EPS, "the foot beside the wide label", "wide label");
+	htree_print_document(doc);
+	htree_destroy_document(doc);
+
 	/* the layered layout attaches the links after placing the comment */
 	doc = build(&tree, &b, &c, &ab, &to_b, &to_ab, &chunk);
 	htree_default_layout_options(&opts);

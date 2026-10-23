@@ -769,7 +769,7 @@ on the result before printing it:
   update;
 * 49 the comment links to a state, to a transition and to a fragment in the
   preserving and the layered reconstruction, the copy, the Qt frame, the foot
-  beside the label of the transition;
+  beside the label of the transition, a wide label taking the margin;
 * 50 the update of the comment links: kept, filled, idempotent.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
