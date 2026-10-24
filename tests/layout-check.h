@@ -232,13 +232,13 @@ static inline int lc_rect_inside(const HTreeRect* inner, const HTreeRect* outer,
 }
 
 /* H1: the children inside their parent (with the padding), the siblings
-   disjoint; the comments are not checked. Returns the violations */
+   disjoint; the comments are children like the others. Returns the violations */
 static inline int lc_check_containment(const HTreeNode* parent, double pad)
 {
 	int bad = 0;
 	for (const HTreeNode* c = parent->children; c; c = c->next) {
 		HTreeRect r;
-		if (c->type == htComment || (!c->rect && !c->point)) continue;
+		if (!c->rect && !c->point) continue;
 		lc_bounds(c, &r);
 		if (parent->rect && !lc_rect_inside(&r, parent->rect, pad)) {
 			fprintf(stderr, "%s escapes %s\n", c->id, parent->id);
@@ -246,7 +246,7 @@ static inline int lc_check_containment(const HTreeNode* parent, double pad)
 		}
 		for (const HTreeNode* d = c->next; d; d = d->next) {
 			HTreeRect q;
-			if (d->type == htComment || (!d->rect && !d->point)) continue;
+			if (!d->rect && !d->point) continue;
 			lc_bounds(d, &q);
 			if (r.width > 0.0 && q.width > 0.0 && lc_rects_overlap(&r, &q)) {
 				fprintf(stderr, "%s overlaps %s\n", c->id, d->id);
@@ -332,6 +332,31 @@ static inline int lc_count_line_rect_crossings(const HTree* tree)
 		total += lc_line_rect_nodes(tree->nodes, e);
 	}
 	return total;
+}
+
+/* H5: the comments hit by a transition route or covered by a label */
+static inline int lc_count_comment_hits_nodes(const HTree* tree, const HTreeNode* nodes)
+{
+	int total = 0;
+	for (const HTreeNode* n = nodes; n; n = n->next) {
+		if (n->type == htComment && n->rect) {
+			for (const HTreeEdge* e = tree->edges; e; e = e->next) {
+				if (!lc_edge_is_transition(e)) continue;
+				if (lc_count_border_crossings(e, n->rect) > 0 ||
+					(e->label_rect && e->label_rect->width > 0.0 && lc_rects_overlap(e->label_rect, n->rect))) {
+					fprintf(stderr, "%s hits comment %s\n", e->id, n->id);
+					total++;
+				}
+			}
+		}
+		if (n->children) total += lc_count_comment_hits_nodes(tree, n->children);
+	}
+	return total;
+}
+
+static inline int lc_count_comment_hits(const HTree* tree)
+{
+	return lc_count_comment_hits_nodes(tree, tree->nodes);
 }
 
 static inline int lc_finite_nodes(const HTreeNode* nodes)

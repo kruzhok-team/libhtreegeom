@@ -106,6 +106,7 @@ typedef struct {
 	double              seed_x, seed_y;       /* its centre in the document */
 	double              seed_flow, seed_cross; /* its centre in the frame */
 	int                 seed_layer;  /* its band among the seeded vertices, 1.. */
+	std::vector<HTreeNode*> attached; /* the comments stacked after the vertex (the margin) */
 } HTLayoutVertex;
 
 typedef struct {
@@ -159,7 +160,10 @@ typedef struct {
 	std::vector<HTreeNode*>     children;   /* the vertex children in the child order */
 	std::vector<HTLayoutSeed>   seeds;
 	std::vector<HTLayoutPiece>  pieces;
-	double                      shelf;      /* the comment shelf cursor */
+	std::vector<HTreeNode*>     comments;   /* the comment children in the child order */
+	double                      shelf;      /* the update: the shelf cursor across the flow */
+	int                         shelf_set;  /* the update: the shelf row origin is known */
+	HTreePoint                  shelf_origin;
 } HTLayoutContainer;
 
 typedef struct {
@@ -174,6 +178,7 @@ typedef struct {
 	std::map<const HTreeNode*, HTreePoint> seeds; /* the update: the centres before the layout */
 	std::set<const HTreeEdge*>      edge_seeds;   /* the update: the edges that had geometry */
 	std::set<const HTreeEdge*>      routed;       /* the edges routed in this pass */
+	std::vector<HTreeNode*>         placed;       /* the update: the comments placed in this pass */
 } HTLayoutContext;
 
 static int htree_layout_seeded(const HTLayoutContext* ctx, const HTreeNode* node, HTreePoint* centre)
@@ -325,12 +330,15 @@ static void htree_layout_collect(HTLayoutContext* ctx, HTreeNode* node, int leve
 	ctx->containers[ci].level = level;
 	ctx->containers[ci].direction = htree_layout_preferred(&ctx->opts, ctx->start, level);
 	ctx->containers[ci].shelf = 0.0;
+	ctx->containers[ci].shelf_set = 0;
+	ctx->containers[ci].shelf_origin.x = ctx->containers[ci].shelf_origin.y = 0.0;
 	if (node) {
 		ctx->index[node] = ci;
 	}
 	first = htree_layout_first_child(ctx, ci);
 	for (HTreeNode* child = first; child; child = child->next) {
 		if (child->type == htRegion) has_region = 1;
+		if (htree_node_is_comment(child)) ctx->containers[ci].comments.push_back(child);
 		if (htree_layout_is_vertex(child)) {
 			has_vertex = 1;
 			ctx->containers[ci].children.push_back(child);
@@ -466,6 +474,145 @@ static void htree_layout_infer_directions(HTLayoutContext* ctx)
  * The layered layout of one graph container: P2 - P6
  * ----------------------------------------------------------------------------- */
 
+/* -----------------------------------------------------------------------------
+ * P10: the comments are content - a linked comment is the margin of its
+ * anchor (the vertex child of its own container holding the subject), the
+ * others form the shelf band after the content; the update places the new
+ * comments around the drawn ones instead (htree_layout_place_comment)
+ * ----------------------------------------------------------------------------- */
+
+/* the comment size: the preset minimum, else the default node size */
+static void htree_layout_comment_size(const HTLayoutContext* ctx, const HTreeNode* c, double* w, double* h)
+{
+	*w = c->min_rect ? c->min_rect->width : ctx->opts.node_width;
+	*h = c->min_rect ? c->min_rect->height : ctx->opts.node_height;
+}
+
+/* the subject of a comment: the target of its first link (the source state
+   of a commented transition) */
+static HTreeNode* htree_layout_comment_subject(const HTLayoutContext* ctx, const HTreeNode* comment)
+{
+	for (HTreeEdge* e = ctx->tree->edges; e; e = e->next) {
+		if (e->source == comment && e->target && e->target != comment) return e->target;
+	}
+	return NULL;
+}
+
+/* the anchor of a comment in its container: the vertex child holding the
+   subject (the subject itself or its ancestor at this level), -1 = none (an
+   unlinked comment, a link to a comment or out of the container) */
+static int htree_layout_comment_anchor(const HTLayoutContext* ctx, int ci, const HTreeNode* comment)
+{
+	const HTreeNode* subject = htree_layout_comment_subject(ctx, comment);
+	if (!subject || htree_node_is_comment(subject)) return -1;
+	return htree_layout_child_containing(ctx, ci, subject);
+}
+
+/* the full layout: the comments of a graph container attached to their anchors */
+static void htree_layout_attach_comments(const HTLayoutContext* ctx, int ci, HTLayoutGraph* g)
+{
+	const HTLayoutContainer& c = ctx->containers[ci];
+	if (ctx->update) return;
+	for (size_t k = 0; k < c.comments.size(); k++) {
+		int a = htree_layout_comment_anchor(ctx, ci, c.comments[k]);
+		if (a >= 0) g->vertices[a + 1].attached.push_back(c.comments[k]);
+	}
+}
+
+/* the stack of the attached comments along the flow: its length and the
+   widest cross size */
+static void htree_layout_margin(const HTLayoutContext* ctx, HTFlowDirection dir, const HTLayoutVertex& vx,
+								double* stack, double* cross)
+{
+	*stack = *cross = 0.0;
+	for (size_t k = 0; k < vx.attached.size(); k++) {
+		double w, h, f, c;
+		htree_layout_comment_size(ctx, vx.attached[k], &w, &h);
+		htree_layout_size_to_frame(dir, w, h, &f, &c);
+		*stack += f + (k ? ctx->opts.node_gap : 0.0);
+		if (c > *cross) *cross = c;
+	}
+}
+
+/* the cross extents of a real vertex: the node around its anchor, the
+   margin after it; the slot along the flow as long as the longer of the node
+   and the stack */
+static void htree_layout_vertex_extents(const HTLayoutContext* ctx, HTFlowDirection dir, HTLayoutVertex& vx)
+{
+	double stack, cross;
+	vx.before = vx.after = vx.cross_size / 2.0;
+	if (vx.attached.empty()) return;
+	htree_layout_margin(ctx, dir, vx, &stack, &cross);
+	vx.after += ctx->opts.node_gap + cross;
+	if (stack > vx.flow_size) vx.flow_size = stack;
+}
+
+/* the comments of the container for the shelf band: every comment of a
+   container without a graph, the unanchored ones of a graph */
+static void htree_layout_shelf_comments(const HTLayoutContext* ctx, int ci, std::vector<HTreeNode*>& out)
+{
+	const HTLayoutContainer& c = ctx->containers[ci];
+	out.clear();
+	if (ctx->update) return;
+	for (size_t k = 0; k < c.comments.size(); k++) {
+		if (c.kind != htContainerGraph || htree_layout_comment_anchor(ctx, ci, c.comments[k]) < 0) {
+			out.push_back(c.comments[k]);
+		}
+	}
+}
+
+/* the shelf band sizes in the frame: the row across the flow, node gaps apart */
+static void htree_layout_shelf_size(const HTLayoutContext* ctx, int ci, HTFlowDirection dir,
+									double* flow, double* cross)
+{
+	std::vector<HTreeNode*> shelf;
+	htree_layout_shelf_comments(ctx, ci, shelf);
+	*flow = *cross = 0.0;
+	for (size_t k = 0; k < shelf.size(); k++) {
+		double w, h, f, c;
+		htree_layout_comment_size(ctx, shelf[k], &w, &h);
+		htree_layout_size_to_frame(dir, w, h, &f, &c);
+		*cross += c + (k ? ctx->opts.node_gap : 0.0);
+		if (f > *flow) *flow = f;
+	}
+}
+
+/* the content extents with the shelf band after them (a layer gap away) */
+static void htree_layout_shelf_extents(const HTLayoutContext* ctx, int ci, HTFlowDirection dir,
+									   double* flow_extent, double* cross_extent)
+{
+	double rf, rc;
+	htree_layout_shelf_size(ctx, ci, dir, &rf, &rc);
+	if (rf <= 0.0) return;
+	*flow_extent = (*flow_extent > 0.0 ? *flow_extent + ctx->opts.layer_gap : 0.0) + rf;
+	if (rc > *cross_extent) *cross_extent = rc;
+}
+
+/* the shelf band placed after the content in the content coordinates; the
+   extents of the content with the band come back in the document axes */
+static void htree_layout_place_shelf(const HTLayoutContext* ctx, int ci, HTFlowDirection dir,
+									 double flow_extent, double cross_extent, double* cw, double* ch)
+{
+	std::vector<HTreeNode*> shelf;
+	double cursor = 0.0, flow0;
+	htree_layout_shelf_comments(ctx, ci, shelf);
+	flow0 = flow_extent > 0.0 ? flow_extent + ctx->opts.layer_gap : 0.0;
+	for (size_t k = 0; k < shelf.size(); k++) {
+		HTreeNode* n = shelf[k];
+		double w, h, f, c;
+		htree_layout_comment_size(ctx, n, &w, &h);
+		htree_layout_size_to_frame(dir, w, h, &f, &c);
+		if (!n->rect) n->rect = htree_new_rect();
+		htree_layout_to_doc(dir, flow0, cursor, &n->rect->x, &n->rect->y);
+		n->rect->width = w;
+		n->rect->height = h;
+		cursor += c + ctx->opts.node_gap;
+	}
+	htree_layout_shelf_extents(ctx, ci, dir, &flow_extent, &cross_extent);
+	if (dir == htFlowDown) { *cw = cross_extent; *ch = flow_extent; }
+	else { *cw = flow_extent; *ch = cross_extent; }
+}
+
 static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayoutGraph* g)
 {
 	const HTLayoutContainer& c = ctx->containers[ci];
@@ -512,6 +659,8 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 			v.before = v.after = v.cross_size / 2.0;
 		}
 	}
+	htree_layout_attach_comments(ctx, ci, g);
+	for (size_t k = 1; k <= n; k++) htree_layout_vertex_extents(ctx, c.direction, g->vertices[k]);
 	for (size_t k = 0; k < c.seeds.size(); k++) {
 		const HTLayoutSeed& s = c.seeds[k];
 		HTLayoutEdge e;
@@ -1342,15 +1491,20 @@ static void htree_layout_normalise(HTLayoutGraph* g, double* flow_extent, double
 	*cross_extent = any ? c1 - c0 : 0.0;
 }
 
-/* place the children and record the edge pieces in the content coordinates */
+/* place the children, their attached comments and the shelf band, and record
+   the edge pieces in the content coordinates */
 static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph* g)
 {
 	HTLayoutContainer& c = ctx->containers[ci];
 	const HTLayoutOptions* o = &ctx->opts;
+	double flow_extent = 0.0, cross_extent = 0.0, cw, ch;
 
 	for (size_t v = 0; v < g->vertices.size(); v++) {
 		HTLayoutVertex& vx = g->vertices[v];
-		double x, y;
+		double x, y, cursor, side;
+		if (vx.kind == htVertexVirtual) continue;
+		if (vx.flow + vx.flow_size / 2.0 > flow_extent) flow_extent = vx.flow + vx.flow_size / 2.0;
+		if (vx.cross + vx.after > cross_extent) cross_extent = vx.cross + vx.after;
 		if (vx.kind != htVertexReal) continue;
 		htree_layout_to_doc(g->direction, vx.flow, vx.cross, &x, &y);
 		if (vx.node->rect) {
@@ -1361,7 +1515,23 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 			vx.node->point->x = x;
 			vx.node->point->y = y;
 		}
+		/* the margin: the comments stacked along the flow from the slot start,
+		   a node gap after the node across the flow */
+		cursor = vx.flow - vx.flow_size / 2.0;
+		side = vx.cross + vx.cross_size / 2.0 + o->node_gap;
+		for (size_t k = 0; k < vx.attached.size(); k++) {
+			HTreeNode* cm = vx.attached[k];
+			double w, h, f, cs;
+			htree_layout_comment_size(ctx, cm, &w, &h);
+			htree_layout_size_to_frame(g->direction, w, h, &f, &cs);
+			if (!cm->rect) cm->rect = htree_new_rect();
+			htree_layout_to_doc(g->direction, cursor, side, &cm->rect->x, &cm->rect->y);
+			cm->rect->width = w;
+			cm->rect->height = h;
+			cursor += f + o->node_gap;
+		}
 	}
+	htree_layout_place_shelf(ctx, ci, g->direction, flow_extent, cross_extent, &cw, &ch);
 	for (size_t k = 0; k < g->edges.size(); k++) {
 		const HTLayoutEdge& e = g->edges[k];
 		HTLayoutPiece piece;
@@ -1449,7 +1619,7 @@ static void htree_layout_graph_frame(const HTLayoutContext* ctx, int ci, const H
 		if (vx.kind == htVertexReal && vx.node && vx.node->rect) {
 			htree_layout_size_to_frame(dir, vx.node->rect->width, vx.node->rect->height,
 									   &vx.flow_size, &vx.cross_size);
-			vx.before = vx.after = vx.cross_size / 2.0;
+			htree_layout_vertex_extents(ctx, dir, vx);
 		} else if (vx.kind == htVertexLabelDummy && vx.edge >= 0) {
 			const HTLayoutEdge& e = g->edges[vx.edge];
 			double cs;
@@ -1463,6 +1633,7 @@ static void htree_layout_graph_frame(const HTLayoutContext* ctx, int ci, const H
 	htree_layout_assign_coordinates(g, o);
 	if (g->update) htree_layout_clear_routes(ctx, ci, g);
 	htree_layout_normalise(g, &flow_extent, &cross_extent);
+	htree_layout_shelf_extents(ctx, ci, dir, &flow_extent, &cross_extent);
 	if (dir == htFlowDown) { *cw = cross_extent; *ch = flow_extent; }
 	else { *cw = flow_extent; *ch = cross_extent; }
 }
@@ -1568,6 +1739,7 @@ static void htree_layout_stack_extents(const HTLayoutContext* ctx, int ci, HTFlo
 		n++;
 	}
 	if (n > 1) along += (n - 1) * ctx->opts.node_gap;
+	htree_layout_shelf_extents(ctx, ci, dir, &across, &along);
 	if (dir == htFlowDown) { *cw = along; *ch = across; }
 	else { *cw = across; *ch = along; }
 }
@@ -1678,8 +1850,9 @@ static int htree_layout_regions(HTLayoutContext* ctx, int ci, double* content_w,
 			w = max_flow;
 		}
 	}
-	*content_w = w;
-	*content_h = h;
+	/* the comments of the composite itself: the shelf band after the regions */
+	if (dir == htFlowDown) htree_layout_place_shelf(ctx, ci, dir, h, w, content_w, content_h);
+	else htree_layout_place_shelf(ctx, ci, dir, w, h, content_w, content_h);
 	return HTREE_OK;
 }
 
@@ -1752,7 +1925,9 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 		res = htree_layout_regions(ctx, ci, &cw, &ch);
 		break;
 	default:
+		/* a container without content: its comments alone */
 		if (dir >= 0) ctx->containers[ci].direction = (HTFlowDirection)dir;
+		htree_layout_place_shelf(ctx, ci, ctx->containers[ci].direction, 0.0, 0.0, &cw, &ch);
 		res = HTREE_OK;
 		break;
 	}
@@ -1848,7 +2023,7 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 		return HTREE_OK;
 	}
 	for (HTreeNode* child = htree_layout_first_child(ctx, ci); child; child = child->next) {
-		if (htree_node_is_comment(child) || htree_layout_is_border_point(child)) continue;
+		if (htree_layout_is_border_point(child)) continue;
 		if (htree_layout_is_container(child)) htree_layout_place_border_points(ctx, ci, child);
 		htree_shift_subtree(child, ix, iy);
 	}
@@ -2285,25 +2460,75 @@ static void htree_layout_node_bounds(const HTreeNode* n, HTreeRect* r)
 	else htree_init_rect(r);
 }
 
-/* the rect is free of the container's other children */
-static int htree_layout_rect_free(const HTLayoutContext* ctx, int ci, const HTreeNode* self, const HTreeRect* r)
+/* the segment meets the rect (Liang-Barsky clipping) */
+static int htree_layout_segment_hits_rect(HTreePoint a, HTreePoint b, const HTreeRect* r)
 {
-	for (HTreeNode* n = htree_layout_first_child(ctx, ci); n; n = n->next) {
+	double t0 = 0.0, t1 = 1.0, dx = b.x - a.x, dy = b.y - a.y;
+	double p[4] = { -dx, dx, -dy, dy };
+	double q[4] = { a.x - r->x, r->x + r->width - a.x, a.y - r->y, r->y + r->height - a.y };
+	for (int i = 0; i < 4; i++) {
+		double t;
+		if (std::fabs(p[i]) < HTREE_COORD_EPS) {
+			if (q[i] < 0.0) return 0;
+			continue;
+		}
+		t = q[i] / p[i];
+		if (p[i] < 0.0) { if (t > t1) return 0; if (t > t0) t0 = t; }
+		else { if (t < t0) return 0; if (t < t1) t1 = t; }
+	}
+	return t0 <= t1;
+}
+
+/* the rect is clear of every drawn node of the tree but the comment's own
+   ancestors (it lies inside them by design); the containers are entered */
+static int htree_layout_nodes_free(const HTreeNode* nodes, const HTreeNode* self, const HTreeRect* r)
+{
+	for (const HTreeNode* n = nodes; n; n = n->next) {
 		HTreeRect b;
-		if (n == self || (!n->rect && !n->point)) continue;
-		htree_layout_node_bounds(n, &b);
-		if (htree_layout_rects_overlap(r, &b)) return 0;
+		if (n == self) continue;
+		if ((n->rect || n->point) && !htree_layout_is_ancestor(n, self)) {
+			htree_layout_node_bounds(n, &b);
+			if (htree_layout_rects_overlap(r, &b)) return 0;
+		}
+		if (n->children && !htree_layout_nodes_free(n->children, self, r)) return 0;
 	}
 	return 1;
 }
 
+/* the rect is clear of the drawn routes and the labels */
+static int htree_layout_edges_free(const HTreeEdge* edges, const HTreeRect* r)
+{
+	for (const HTreeEdge* e = edges; e; e = e->next) {
+		HTreePoint prev;
+		int any = 0;
+		if (e->label_rect && e->label_rect->width > 0.0 && htree_layout_rects_overlap(r, e->label_rect)) return 0;
+		if (!e->source_point || !e->target_point) continue;
+		prev = *e->source_point;
+		any = 1;
+		for (const HTreePolyline* pl = e->polyline; pl; pl = pl->next) {
+			if (htree_layout_segment_hits_rect(prev, pl->point, r)) return 0;
+			prev = pl->point;
+		}
+		if (any && htree_layout_segment_hits_rect(prev, *e->target_point, r)) return 0;
+	}
+	return 1;
+}
+
+/* the rect is free of the drawn content of the whole tree, nested or routed */
+static int htree_layout_rect_free(const HTLayoutContext* ctx, const HTreeNode* self, const HTreeRect* r)
+{
+	return htree_layout_nodes_free(ctx->tree->nodes, self, r) &&
+		htree_layout_edges_free(ctx->tree->edges, r);
+}
+
+/* the bounds of the drawn children, the comments included */
 static void htree_layout_content_bounds(const HTLayoutContext* ctx, int ci, HTreeRect* r)
 {
 	int any = 0;
 	htree_init_rect(r);
 	for (HTreeNode* n = htree_layout_first_child(ctx, ci); n; n = n->next) {
 		HTreeRect b;
-		if (htree_node_is_comment(n) || (!n->rect && !n->point)) continue;
+		if (!n->rect && !n->point) continue;
 		htree_layout_node_bounds(n, &b);
 		if (!any) { *r = b; any = 1; continue; }
 		double x2 = r->x + r->width > b.x + b.width ? r->x + r->width : b.x + b.width;
@@ -2315,56 +2540,74 @@ static void htree_layout_content_bounds(const HTLayoutContext* ctx, int ci, HTre
 	}
 }
 
+/* the update: a new comment beside its anchor in its own container - after
+   it across the flow, stacked along the flow after the comments already
+   there, then before it, then after it along the flow - on the first spot
+   clear of the drawn content, the routes and the labels; else on the shelf
+   row after the drawn content (the comments included) of its container */
 static void htree_layout_place_comment(HTLayoutContext* ctx, HTreeNode* comment)
 {
 	const HTLayoutOptions* o = &ctx->opts;
-	HTreeNode* element = NULL;
+	HTLayoutContainer* c;
 	HTreeRect r, e, content;
-	int ci;
+	int ci, a;
 
 	if (comment->rect) return;
-	r.width = comment->min_rect ? comment->min_rect->width : o->node_width;
-	r.height = comment->min_rect ? comment->min_rect->height : o->node_height;
-	for (HTreeEdge* edge = ctx->tree->edges; edge && !element; edge = edge->next) {
-		if (edge->source == comment && edge->target && edge->target != comment) element = edge->target;
-	}
-	if (element && (element->rect || element->point)) {
-		ci = htree_layout_container_of(ctx, element);
-		HTFlowDirection dir = ci >= 0 ? ctx->containers[ci].direction : o->direction;
+	htree_layout_comment_size(ctx, comment, &r.width, &r.height);
+	ci = htree_layout_container_of(ctx, comment);
+	if (ci < 0) ci = 0;
+	c = &ctx->containers[ci];
+	a = htree_layout_comment_anchor(ctx, ci, comment);
+	if (a >= 0 && (c->children[a]->rect || c->children[a]->point)) {
 		double gap = o->node_gap;
-		htree_layout_node_bounds(element, &e);
-		for (int cand = 0; cand < 3 && ci >= 0; cand++) {
-			if (dir == htFlowDown) {
-				if (cand == 0) { r.x = e.x + e.width + gap; r.y = e.y; }
-				else if (cand == 1) { r.x = e.x - gap - r.width; r.y = e.y; }
-				else { r.x = e.x; r.y = e.y + e.height + gap; }
-			} else {
-				if (cand == 0) { r.x = e.x; r.y = e.y + e.height + gap; }
-				else if (cand == 1) { r.x = e.x; r.y = e.y - gap - r.height; }
-				else { r.x = e.x + e.width + gap; r.y = e.y; }
-			}
-			if (htree_layout_rect_free(ctx, ci, comment, &r)) {
-				comment->rect = htree_new_rect();
-				*comment->rect = r;
-				return;
+		htree_layout_node_bounds(c->children[a], &e);
+		for (int side = 0; side < 3; side++) {
+			for (int k = 0; k < 4 && (side < 2 || k == 0); k++) {
+				if (c->direction == htFlowDown) {
+					r.y = side < 2 ? e.y + k * (r.height + gap) : e.y + e.height + gap;
+					r.x = side == 0 ? e.x + e.width + gap : side == 1 ? e.x - gap - r.width : e.x;
+				} else {
+					r.x = side < 2 ? e.x + k * (r.width + gap) : e.x + e.width + gap;
+					r.y = side == 0 ? e.y + e.height + gap : side == 1 ? e.y - gap - r.height : e.y;
+				}
+				if (htree_layout_rect_free(ctx, comment, &r)) {
+					comment->rect = htree_new_rect();
+					*comment->rect = r;
+					ctx->placed.push_back(comment);
+					return;
+				}
 			}
 		}
 	}
-	/* the shelf after the content of the comment's own container */
-	ci = htree_layout_container_of(ctx, comment);
-	if (ci < 0) ci = 0;
-	htree_layout_content_bounds(ctx, ci, &content);
-	if (ctx->containers[ci].direction == htFlowDown) {
-		r.x = content.x + ctx->containers[ci].shelf;
-		r.y = content.y + content.height + o->node_gap;
-		ctx->containers[ci].shelf += r.width + o->node_gap;
+	if (!c->shelf_set) {
+		htree_layout_content_bounds(ctx, ci, &content);
+		if (content.width <= 0.0 && content.height <= 0.0 && c->node && c->node->rect) {
+			content.x = c->node->rect->x + o->padding;
+			content.y = c->node->rect->y + o->padding;
+			content.width = content.height = 0.0;
+			c->shelf_origin.x = content.x;
+			c->shelf_origin.y = content.y;
+		} else if (c->direction == htFlowDown) {
+			c->shelf_origin.x = content.x;
+			c->shelf_origin.y = content.y + content.height + o->layer_gap;
+		} else {
+			c->shelf_origin.x = content.x + content.width + o->layer_gap;
+			c->shelf_origin.y = content.y;
+		}
+		c->shelf_set = 1;
+	}
+	if (c->direction == htFlowDown) {
+		r.x = c->shelf_origin.x + c->shelf;
+		r.y = c->shelf_origin.y;
+		c->shelf += r.width + o->node_gap;
 	} else {
-		r.x = content.x + content.width + o->node_gap;
-		r.y = content.y + ctx->containers[ci].shelf;
-		ctx->containers[ci].shelf += r.height + o->node_gap;
+		r.x = c->shelf_origin.x;
+		r.y = c->shelf_origin.y + c->shelf;
+		c->shelf += r.height + o->node_gap;
 	}
 	comment->rect = htree_new_rect();
 	*comment->rect = r;
+	ctx->placed.push_back(comment);
 }
 
 static void htree_layout_place_comments(HTLayoutContext* ctx, HTreeNode* nodes)
@@ -2372,6 +2615,28 @@ static void htree_layout_place_comments(HTLayoutContext* ctx, HTreeNode* nodes)
 	for (HTreeNode* n = nodes; n; n = n->next) {
 		if (htree_node_is_comment(n)) htree_layout_place_comment(ctx, n);
 		if (n->children) htree_layout_place_comments(ctx, n->children);
+	}
+}
+
+/* the update: the containers grow (grow-only, with the padding) over the
+   comments placed in this pass; the machine border grows afterwards */
+static void htree_layout_grow_over_comments(HTLayoutContext* ctx)
+{
+	for (size_t k = 0; k < ctx->placed.size(); k++) {
+		HTreeRect need = *ctx->placed[k]->rect;
+		for (HTreeNode* p = ctx->placed[k]->parent; p && p->type != htTree; p = p->parent) {
+			double x2, y2, pad = ctx->opts.padding;
+			if (!p->rect) continue;
+			x2 = p->rect->x + p->rect->width;
+			y2 = p->rect->y + p->rect->height;
+			if (need.x - pad < p->rect->x) p->rect->x = need.x - pad;
+			if (need.y - pad < p->rect->y) p->rect->y = need.y - pad;
+			if (need.x + need.width + pad > x2) x2 = need.x + need.width + pad;
+			if (need.y + need.height + pad > y2) y2 = need.y + need.height + pad;
+			p->rect->width = x2 - p->rect->x;
+			p->rect->height = y2 - p->rect->y;
+			need = *p->rect;   /* the next ancestor holds the grown one with its padding */
+		}
 	}
 }
 
@@ -2463,10 +2728,13 @@ static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayou
 	if (res != HTREE_OK) return res;
 	res = htree_layout_route_edges(&ctx);
 	if (res != HTREE_OK) return res;
-	htree_layout_place_comments(&ctx, tree->nodes);
+	if (update) {
+		htree_layout_place_comments(&ctx, tree->nodes);
+		htree_layout_grow_over_comments(&ctx);
+	}
 	res = htree_layout_attach_links(&ctx);
 	if (res != HTREE_OK) return res;
-	res = htree_grow_sm_border(tree);
+	res = htree_grow_sm_border(tree, 1);
 	if (res != HTREE_OK) return res;
 	htree_layout_final_shape(&ctx, w, h);
 	return HTREE_OK;

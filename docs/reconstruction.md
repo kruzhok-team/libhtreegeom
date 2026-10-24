@@ -282,7 +282,8 @@ method:
 
 * the vertices are the direct children that take part in the layout:
   states, submachine states, pseudostates (by their role, below); the
-  comments are not vertices (they are placed after the layout);
+  comments are not vertices - a linked comment is the margin of its
+  anchor vertex, the others form the shelf band (P10);
 * an edge is a transition between two vertices; a transition whose ends
   lie deeper in the tree is *lifted*: with R the container, u' and v' the
   children of R that contain the source u and the target v, the edge
@@ -541,11 +542,45 @@ placed:
 
 ### P10 the comments
 
-A comment linked to an element is placed beside that element on its
-free side (the cross-axis end with no neighbour, else after the last
-layer), with the `NODE_GAP`; an unlinked comment is shelf-placed after
-the content of its container. Comments enlarge neither the containers
-nor the SM border (the 1.0.6 rule).
+The comments are content: they are placed inside their own container,
+which grows around them like around its states, and the SM border
+encloses them (the editor's containment law; the preserving fill-in and
+a rect-less machine keep the old rule of a comment outside the border).
+A comment is placed in the container it belongs to, never beside a
+subject in another container:
+
+* a linked comment is the *margin* of its anchor - the vertex child of
+  the comment's container that holds the subject of its first link: the
+  subject itself, the subject's ancestor at this level when the subject
+  is nested (lifted like a transition), or the source state of a
+  commented transition. The margin is reserved in the layered graph (the
+  ELK comment-box treatment): the anchor's cross extent after it grows
+  by the `NODE_GAP` and the widest comment, its flow slot by the stack of
+  the comments, so P5-P8 keep the room and nothing overlaps; the comments
+  are stacked along the flow from the slot start (DOWN: to the right of
+  the anchor, top-aligned; RIGHT: below it, left-aligned);
+* a comment without an anchor - unlinked, linked to a comment or to a
+  subject outside its container (an upward link), or a comment of a
+  container without a layout graph (a composite beside its regions, a
+  state holding only comments) - goes to the *shelf band*: one more flow
+  band after the content, a `LAYER_GAP` away, the comments in a row
+  across the flow in the document order, `NODE_GAP` apart; the band
+  enters the container fit like a layer.
+
+```
+   DOWN frame                              RIGHT frame
+   ┌───┐ gap ┌──────┐                      ┌───┐──>┌───┐──>┌───┐
+   │ a ├────>│ m1   │  the margin of a     │ a │   │ b │   │ c │
+   └─┬─┘     ├──────┤  (two comments)      └───┘   └─┬─┘   └───┘
+     v       │ m2   │                            gap ┌┴─────┐
+   ┌───┐     └──────┘                                │ m    │  the margin of b
+   │ b │                                             └──────┘
+   └───┘                                     ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ layer gap
+   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ layer gap        ┌──────┐
+   ┌──────┐ gap ┌──────┐                     │ u    │  the shelf band (a column)
+   │ u1   │     │ u2   │  the shelf band     └──────┘
+   └──────┘     └──────┘
+```
 
 The links of the placed comments get straight ends (PNST 1044 9.1.1):
 
@@ -566,7 +601,9 @@ The edge kind is `HTreeEdge::type` (`htEdgeLink`, `htEdgeChunkLink`; an
 untyped edge from a comment counts as a link to an element) and the
 commented transition is `target_edge`, set by `htree_edge_set_link`. The
 preserving reconstruction attaches the links after the transitions in the
-same way; neither moves a stored end.
+same way; neither moves a stored end. The links do not route: a link may
+cross a state when its comment and its subject are far apart (an upward
+link from a nested container).
 
 ### Several machines
 
@@ -629,7 +666,14 @@ drawn region are laid out as in the full layout; a
 container grows around its content by the padding and keeps its drawn
 corner, so its parent anchors the new centre; a document with several
 machines keeps the drawn ones in place and puts the new ones after their
-extent.
+extent. A new comment is placed after the routing, in its own container:
+beside its anchor (after it across the flow, stacked along the flow after
+the comments already there, then before it, then after it along the
+flow) on the first spot clear of every drawn node of the tree, route and
+label; else on the shelf row after the drawn content of its container,
+the drawn comments included. The containers grow (grow-only, with the
+padding, cascading to the ancestors) over the new comments and the
+machine border encloses them; no drawn element moves.
 
 The guarantees: on a fully drawn document the update changes nothing;
 the layer, the order and the place of every drawn state are kept; a new
@@ -645,6 +689,9 @@ container with its routes; test 47 a new state and a bend kept off a drawn
 route; test 48 the ends of a drawn route on a grown state. A drawn comment
 link whose ends stay (or move together) and whose commented transition is
 not routed again keeps its ends, only the missing ones are filled; test 50.
+Test 52 covers the new comments: beside a drawn state, two on the shelf
+apart, one inside a drawn composite that grows from its corner, the
+idempotence.
 
 ## The Interface
 
@@ -756,7 +803,7 @@ on the result before printing it:
 * 33 the preset sizes: a min rect never shrunk, a wide title block
   widening its composite, the content centred;
 * 34 comments: beside the linked element, the link attached, the
-  unlinked comment on the shelf;
+  unlinked comment on the shelf band, the SM border around them;
 * 35 the degenerate documents: empty, points only, a single state, loops
   only, cycles without roles, parallel edges, no root rect, a submachine
   with its border points, a top-level list;
@@ -770,7 +817,13 @@ on the result before printing it:
 * 49 the comment links to a state, to a transition and to a fragment in the
   preserving and the layered reconstruction, the copy, the Qt frame, the foot
   beside the label of the transition, a wide label taking the margin;
-* 50 the update of the comment links: kept, filled, idempotent.
+* 50 the update of the comment links: kept, filled, idempotent;
+* 51 the comments inside their containers: a region's comment inside the
+  composite, an upward-linked comment on the region's shelf, a state
+  holding only a comment, two machine comments and a transition comment
+  stacked beside the composite holding their subjects, the unlinked one
+  on the shelf band after everything, no route over a comment (H5);
+* 52 the update with new comments (see The update).
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness

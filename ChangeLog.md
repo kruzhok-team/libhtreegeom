@@ -10,6 +10,15 @@ Added:
   (PNST 1044 9.1.1); the update
   keeps the drawn links and fills only the missing ends.
 
+Changed:
+- the comments are content of the layered layout: a linked comment is the
+  margin of its anchor (the vertex of its own container holding the subject,
+  stacked along the flow), the others form the shelf band after the content;
+  the containers and the machine border grow around them (no comment outside
+  its container, no overlap); the update places a new comment on the first
+  spot beside its anchor clear of every drawn node, route and label, else on
+  the shelf after the drawn content, and grows the containers over it.
+
 ## Version 1.2.0
 
 Added:

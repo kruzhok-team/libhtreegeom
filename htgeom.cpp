@@ -1915,8 +1915,10 @@ static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 }
 
 /* Grow the explicit SM border (grow-only) to cover the tree content
-   including the reconstructed edge geometry */
-int htree_grow_sm_border(HTree* tree)
+   including the reconstructed edge geometry; the comments count only on
+   request (the layered layout), the preserving reconstruction leaves an
+   outside comment outside */
+int htree_grow_sm_border(HTree* tree, int with_comments)
 {
 	if (!(tree->nodes && !tree->nodes->next &&
 		  tree->nodes->type == htTree && tree->nodes->rect)) {
@@ -1926,13 +1928,12 @@ int htree_grow_sm_border(HTree* tree)
 	std::vector<h2d::Point2dD> points;
 	std::vector<h2d::FRectD> rects;
 	if (tree->nodes->children) {
-		/* grow the border to the content, but never toward an outside comment */
-		int res = htree_get_nodes_collections(tree->nodes->children, points, rects, 1);
+		int res = htree_get_nodes_collections(tree->nodes->children, points, rects, !with_comments);
 		if (res != HTREE_OK) {
 			return res;
 		}
 	}
-	int res = htree_get_edges_collections(tree->edges, points, rects, 1);
+	int res = htree_get_edges_collections(tree->edges, points, rects, !with_comments);
 	if (res != HTREE_OK) {
 		return res;
 	}
@@ -2070,7 +2071,7 @@ static int htree_rebuild_document_geometry(HTDocument* doc, int reconstruct_sm,
 		if (res != HTREE_OK) {
 			return res;
 		}
-		res = htree_grow_sm_border(tree);
+		res = htree_grow_sm_border(tree, 0);
 		if (res != HTREE_OK) {
 			return res;
 		}

@@ -39,7 +39,7 @@ int  htree_project_edge_to_borders(HTreeEdge* edge);
 int  htree_attach_link(HTreeEdge* edge);
 /* the side loop of a self-transition: on the right border, or on the bottom one */
 int  htree_reconstruct_edge_loop(HTreeEdge* edge, int bottom_side);
-int  htree_grow_sm_border(HTree* tree);
+int  htree_grow_sm_border(HTree* tree, int with_comments);
 int  htree_tree_bounding_rect(const HTree* tree, int skip_comments, HTreeRect** result);
 
 /* htgeom_layout.cpp: the layered layout of one tree (docs/reconstruction.md) */
