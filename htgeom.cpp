@@ -816,6 +816,18 @@ static void htree_border_toward(const HTreeNode* n, const HTreePoint* toward, HT
 					 std::fabs(toward->y - result->y) < HTREE_COORD_EPS)) {
 		return;
 	}
+	if (n->role == htRoleChoice) {
+		/* a choice is the rhombus inscribed in its rect: a link end lies anywhere on
+		   its border, not only on its vertices; a point inside keeps the centre */
+		double hw = n->rect->width / 2.0, hh = n->rect->height / 2.0;
+		double dx = toward->x - result->x, dy = toward->y - result->y;
+		double s = hw > 0.0 && hh > 0.0 ? std::fabs(dx) / hw + std::fabs(dy) / hh : 0.0;
+		if (s > 1.0) {
+			result->x += dx / s;
+			result->y += dy / s;
+		}
+		return;
+	}
 	auto res = h2d::SegmentD(htree_point_to_homog(result), htree_point_to_homog(toward))
 		.intersects(htree_rect_to_homog(n->rect));
 	if (res() && res.get().size() >= 1) {

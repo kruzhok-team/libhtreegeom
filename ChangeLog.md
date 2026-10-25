@@ -8,7 +8,8 @@ Added:
   reconstruction attaches the links to the borders, a link to a transition on its
   path off its arrow and its label, a link to a fragment without a target point
   (PNST 1044 9.1.1); the update
-  keeps the drawn links and fills only the missing ends.
+  keeps the drawn links and fills only the missing ends; a link to a choice
+  ends anywhere on the border of its rhombus.
 
 Changed:
 - the comments are content of the layered layout: a linked comment is the

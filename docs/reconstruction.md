@@ -601,7 +601,9 @@ The edge kind is `HTreeEdge::type` (`htEdgeLink`, `htEdgeChunkLink`; an
 untyped edge from a comment counts as a link to an element) and the
 commented transition is `target_edge`, set by `htree_edge_set_link`. The
 preserving reconstruction attaches the links after the transitions in the
-same way; neither moves a stored end. The links do not route: a link may
+same way; neither moves a stored end. A link to a choice (`htRoleChoice`)
+ends on the rhombus inscribed in its rect, anywhere on its edges toward the
+comment, not only on the vertices a transition takes. The links do not route: a link may
 cross a state when its comment and its subject are far apart (an upward
 link from a nested container).
 
@@ -823,7 +825,9 @@ on the result before printing it:
   holding only a comment, two machine comments and a transition comment
   stacked beside the composite holding their subjects, the unlinked one
   on the shelf band after everything, no route over a comment (H5);
-* 52 the update with new comments (see The update).
+* 52 the update with new comments (see The update);
+* 53 a link to a choice ends on an edge of its rhombus in the reconstruction
+  and the update, a drawn end kept.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness
