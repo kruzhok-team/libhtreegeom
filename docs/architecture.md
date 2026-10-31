@@ -140,7 +140,9 @@ left-top format it is its left-top corner relative to the source's. A special ca
 source point instead of the source node for the
 absolute/local-center/absolute/`edgeCenter` format combination.
 
-Reconstruction has two modes. The preserving fill-in (no layout
+Reconstruction has two modes, and the layered layout three: the full
+layout, the update (seeded and pinned by the drawing) and the arrange
+(seeded by it, nothing pinned). The preserving fill-in (no layout
 options) never modifies the existing geometry: missing children are
 shelf-placed inside their parent (rows with `PADDING` gaps,
 `HTREE_SHELF_COLUMNS` columns wide when the parent has no rect yet,
@@ -206,6 +208,6 @@ combinations), test 17 six levels of nested states, test 18 the
 border-to-center projection, tests 19-21 and 24 the reconstruction
 fill-in (the edge fill-in, the preserving shelf placement with the
 grow-only parents, the minimal attachment, the comment outside the
-border), tests 25-52 the layered layout, its update and the comments
+border), tests 25-58 the layered layout, its update, its arrange and the comments
 (`tests/layout-check.h` holds
 the builders and the readability checks).

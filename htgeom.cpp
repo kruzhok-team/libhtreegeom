@@ -2007,7 +2007,7 @@ static int htree_prepare_update(HTDocument* doc)
 }
 
 static int htree_rebuild_document_geometry(HTDocument* doc, int reconstruct_sm,
-										   const HTLayoutOptions* layout, int update)
+										   const HTLayoutOptions* layout, HTRebuildMode mode)
 {
 	int res;
 	HTCoordFormat node_coord_format, edge_coord_format, edge_pl_coord_format;
@@ -2017,7 +2017,7 @@ static int htree_rebuild_document_geometry(HTDocument* doc, int reconstruct_sm,
 	if (!doc || !doc->trees) {
 		return HTREE_BAD_PARAMETER;
 	}
-	if (update && !layout) {
+	if (mode != htRebuildFull && !layout) {
 		htree_default_layout_options(&opts);
 		layout = &opts;
 	}
@@ -2039,7 +2039,7 @@ static int htree_rebuild_document_geometry(HTDocument* doc, int reconstruct_sm,
 		   conversion drops the preset label sizes of the unplaced edges) */
 		int many = doc->trees->next != NULL, k = 0;
 		std::vector<int> drawn;
-		if (update) {
+		if (mode != htRebuildFull) {
 			res = htree_prepare_update(doc);
 			if (res != HTREE_OK) {
 				return res;
@@ -2050,13 +2050,14 @@ static int htree_rebuild_document_geometry(HTDocument* doc, int reconstruct_sm,
 		}
 		for (HTree* tree = doc->trees; tree; tree = tree->next, k++) {
 			/* a document with several machines draws every border */
-			res = htree_layout_tree(tree, reconstruct_sm || many, &opts, update);
+			res = htree_layout_tree(tree, reconstruct_sm || many, &opts, mode);
 			if (res != HTREE_OK) {
 				return res;
 			}
 		}
 		if (many) {
-			res = htree_layout_place_trees(doc, &opts, update ? &drawn[0] : NULL);
+			/* the arrange places the machines anew, in a row */
+			res = htree_layout_place_trees(doc, &opts, mode == htRebuildUpdate ? &drawn[0] : NULL);
 			if (res != HTREE_OK) {
 				return res;
 			}
@@ -2113,13 +2114,19 @@ static int htree_rebuild_document_geometry(HTDocument* doc, int reconstruct_sm,
 int htree_reconstruct_document_geometry(HTDocument* doc, int reconstruct_sm,
 										const HTLayoutOptions* layout)
 {
-	return htree_rebuild_document_geometry(doc, reconstruct_sm, layout, 0);
+	return htree_rebuild_document_geometry(doc, reconstruct_sm, layout, htRebuildFull);
 }
 
 int htree_update_document_geometry(HTDocument* doc, int reconstruct_sm,
 								   const HTLayoutOptions* layout)
 {
-	return htree_rebuild_document_geometry(doc, reconstruct_sm, layout, 1);
+	return htree_rebuild_document_geometry(doc, reconstruct_sm, layout, htRebuildUpdate);
+}
+
+int htree_arrange_document_geometry(HTDocument* doc, int reconstruct_sm,
+									const HTLayoutOptions* layout)
+{
+	return htree_rebuild_document_geometry(doc, reconstruct_sm, layout, htRebuildArrange);
 }
 
 int htree_convert_document_geometry(HTDocument* doc,

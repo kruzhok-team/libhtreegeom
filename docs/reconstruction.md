@@ -695,6 +695,50 @@ Test 52 covers the new comments: beside a drawn state, two on the shelf
 apart, one inside a drawn composite that grows from its corner, the
 idempotence.
 
+### The arrange
+
+`htree_arrange_document_geometry` lays a document out anew and takes from
+its geometry (the seed) the arrangement a drawing tells, not its
+coordinates: a sketch, a picture read by a model, a diagram of another
+tool. The seed is read, then the geometry is cleaned as for the full
+layout and the layered layout runs with the seed's rules of the update and
+none of its pins.
+
+```
+    the seed                      the layout
+       |                              |
+    the node centres  ------->  P2 the bands chained, their order never
+                                   reversed (the update)
+                      ------->  P3 a seeded vertex in its band on the flow
+                                   axis (the update)
+                      ------->  P5 the seeded order of a layer kept (the
+                                   update)
+                      ------->  the frame of a container: its transitions
+                                   between seeded children; else the axis its
+                                   seeded children spread along; else the
+                                   preferred frame
+    the rect sizes    ------->  the minimum sizes: a leaf at least its seed
+                                   rect, a fitted container at least its seed
+                                   rect (the title band stays the preset)
+    the edges, the    ------->  dropped: the routes, the label dummies and
+    comments                       the comments of the full layout
+                                   P6 places, P8 fits, P9 routes, P10 places
+                                   them, nothing pinned
+```
+
+The rules: the bands are read in the seed's own extents - its rect sizes,
+a point as the point size - since a seed has its own scale (a picture is
+measured in its pixels); an unseeded vertex is inserted by the flow as in
+the update; a transition between two seeded vertices of one band takes no
+part in the layering and keeps a straight line; any other transition gets its label
+dummy, so its label has its own room; several machines are placed in a
+row in the document order.
+
+The guarantees: the bands, the order in a layer and the flow direction of
+the seeded vertices are kept; a seeded node is at least its seed size; a
+full layout used as the seed keeps its arrangement; the arrange of an
+arranged document changes nothing. Tests 54-58.
+
 ## The Interface
 
 The public header changes; the preserving fill-in keeps its behaviour
@@ -741,6 +785,8 @@ under a `NULL` layout:
                                              const HTLayoutOptions* layout);
     int  htree_update_document_geometry(HTDocument* doc, int reconstruct_sm,
                                         const HTLayoutOptions* layout);
+    int  htree_arrange_document_geometry(HTDocument* doc, int reconstruct_sm,
+                                         const HTLayoutOptions* layout);
 ```
 
 A value of zero or less in the options selects the library default.
@@ -827,7 +873,17 @@ on the result before printing it:
   on the shelf band after everything, no route over a comment (H5);
 * 52 the update with new comments (see The update);
 * 53 a link to a choice ends on an edge of its rhombus in the reconstruction
-  and the update, a drawn end kept.
+  and the update, a drawn end kept;
+* 54 the arrange of a chain drawn backward and of a swapped diamond: the
+  seeded bands and order kept, the edges routed with their labels;
+* 55 the arrange of a column: the frame of a container without
+  transitions from the spread of its seeded children;
+* 56 the arrange of the full layouts of the tests 25-28 and 34: the
+  arrangement kept, the second arrange changes nothing;
+* 57 the arrange with a large seed rect, a seeded composite and an
+  unseeded vertex: the minimum sizes, the title band, the insertion;
+* 58 the arrange of a drawn document: the routes and the comments of the
+  full layout, nothing pinned.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness

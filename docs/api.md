@@ -114,3 +114,10 @@ border). The allocating functions return NULL on failure.
   layout, containers only grow, the untouched transitions keep their
   routes (moved along when both ends moved alike, their ends kept on the
   border of a grown state); a `NULL` layout takes the defaults
+* `htree_arrange_document_geometry(doc, reconstruct_sm, layout)` - the
+  arrange: the layered layout anew, seeded by the existing geometry - the
+  bands, the order in a layer and the flow direction of the seeded
+  vertices kept, the seed rect sizes as the minimum sizes; the places, the
+  container rects, the routes with their labels and the comments as in the
+  full layout (`docs/reconstruction.md`, The arrange); a `NULL` layout
+  takes the defaults

@@ -1,0 +1,6 @@
+=== column ===
+arrange: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: 0, y: 0, w: 780, h: 520), children: [HTreeNode {id: x, rect: (x: 10, y: 165, w: 300, h: 200)}, HTreeNode {id: comp, rect: (x: 370, y: 20, w: 400, h: 490), children: [HTreeNode {id: a, rect: (x: 420, y: 40, w: 300, h: 200)}, HTreeNode {id: b, rect: (x: 420, y: 300, w: 300, h: 200)}]}]}], edges: [HTreeEdge {id: e-x-comp, source: x, target: comp, source point: (x: 310, y: 265), target point: (x: 370, y: 265)}]}], bounding rect: (x: 0, y: 0, w: 780, h: 520)}
+=== row ===
+arrange: 0
+HTreeDocument {nodes coord: 1, edge coord: 1, edge polylines coord: 1, edge format: 2, trees: [HTree {nodes: [HTreeNode {id: sm, rect: (x: 0, y: 0, w: 1060, h: 430), children: [HTreeNode {id: x, rect: (x: 10, y: 120, w: 300, h: 200)}, HTreeNode {id: comp, rect: (x: 370, y: 20, w: 680, h: 400), children: [HTreeNode {id: a, rect: (x: 380, y: 40, w: 300, h: 200)}, HTreeNode {id: b, rect: (x: 740, y: 40, w: 300, h: 200)}]}]}], edges: [HTreeEdge {id: e-x-comp, source: x, target: comp, source point: (x: 310, y: 220), target point: (x: 370, y: 220)}]}], bounding rect: (x: 0, y: 0, w: 1060, h: 430)}

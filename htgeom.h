@@ -270,6 +270,12 @@ typedef struct {
 	   ones are inserted by the flow; NULL layout = the defaults */
 	int                     htree_update_document_geometry(HTDocument* doc, int reconstruct_sm,
 														   const HTLayoutOptions* layout);
+	/* the arrange: the layered layout anew, seeded by the existing geometry -
+	   its bands, the order in a layer, the flow directions and the minimum
+	   sizes; the places, the routes and the comments as in the full layout;
+	   NULL layout = the defaults */
+	int                     htree_arrange_document_geometry(HTDocument* doc, int reconstruct_sm,
+															const HTLayoutOptions* layout);
 	int                     htree_convert_document_geometry(HTDocument* doc,
 															HTCoordFormat new_node_coord_format,
 															HTCoordFormat new_edge_coord_format,
