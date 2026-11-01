@@ -1522,6 +1522,54 @@ static void htree_layout_ports(HTLayoutGraph* g)
 	}
 }
 
+/* a dummy at a cross keeps the order and the gaps of its layer */
+static int htree_layout_dummy_fits(const HTLayoutGraph* g, const HTLayoutOptions* o, int d, double cross)
+{
+	const HTLayoutVertex& v = g->vertices[d];
+	const std::vector<int>& L = g->layers[v.layer];
+	size_t i = (size_t)v.order;
+	if (i >= L.size() || L[i] != d) {
+		for (i = 0; i < L.size() && L[i] != d; i++) {}
+		if (i == L.size()) return 0;
+	}
+	if (i > 0) {
+		const HTLayoutVertex& l = g->vertices[L[i - 1]];
+		if (l.cross + l.after + htree_layout_gap(g, o, L[i - 1], d) + v.before > cross + HTREE_COORD_EPS) return 0;
+	}
+	if (i + 1 < L.size()) {
+		const HTLayoutVertex& r = g->vertices[L[i + 1]];
+		if (cross + v.after + htree_layout_gap(g, o, d, L[i + 1]) + r.before > r.cross + HTREE_COORD_EPS) return 0;
+	}
+	return 1;
+}
+
+/* the dummies of a chain on the line of a port: they move onto the line of
+   the source port, else of the target port, where every layer has room -
+   the chain runs straight from its end */
+static void htree_layout_straighten(HTLayoutGraph* g, const HTLayoutOptions* o)
+{
+	for (size_t k = 0; k < g->edges.size(); k++) {
+		const HTLayoutEdge& e = g->edges[k];
+		size_t m = e.chain.size() - 1;
+		double aims[2];
+		int n = 0;
+		if (m < 2) continue;
+		if (g->vertices[e.chain[0]].kind == htVertexReal) aims[n++] = htree_layout_chain_cross(g, e, 0);
+		if (g->vertices[e.chain[m]].kind == htVertexReal) aims[n++] = htree_layout_chain_cross(g, e, m);
+		for (int a = 0; a < n; a++) {
+			int fits = 1, straight = 1;
+			for (size_t i = 1; i < m; i++) {
+				straight &= std::fabs(g->vertices[e.chain[i]].cross - aims[a]) <= HTREE_COORD_EPS;
+			}
+			if (straight) break;
+			for (size_t i = 1; i < m && fits; i++) fits = htree_layout_dummy_fits(g, o, e.chain[i], aims[a]);
+			if (!fits) continue;
+			for (size_t i = 1; i < m; i++) g->vertices[e.chain[i]].cross = aims[a];
+			break;
+		}
+	}
+}
+
 /* a step across the flow in a gap: its edge, its index in the chain, the
    crosses it leaves and reaches, its group */
 typedef struct {
@@ -1724,6 +1772,7 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 	}
 	if (g->orthogonal) {
 		htree_layout_ports(g);
+		htree_layout_straighten(g, o);
 		htree_layout_channels(g, o);
 	}
 

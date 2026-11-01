@@ -552,6 +552,9 @@ The cross places of P6 stay; then, per container:
                      facing the next layer (the outgoing) and the previous
                      one (the incoming), ordered by the other point of the
                      step; a choice at its tips, a point at itself
+ the straightening   the dummies of a chain move onto the line of its source
+                     port, else of its target port, where every layer has
+                     room: the chain runs straight from its end
  the steps           a step of a chain between adjacent layers whose ends
                      differ across the flow runs: along - across - along
  the channels        the steps of a gap sharing an end (a fan) are a group;
