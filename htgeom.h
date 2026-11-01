@@ -182,6 +182,7 @@ typedef struct {
 	double                  node_height;
 	double                  point_size;   /* the pseudostate glyph size */
 	double                  choice_size;  /* the side of the square of a choice */
+	double                  seed_pull;    /* the arrange: the pull toward the seed places, 0 none */
 	double                  label_width;  /* the default transition label size */
 	double                  label_height;
 } HTLayoutOptions;

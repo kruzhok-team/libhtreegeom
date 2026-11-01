@@ -51,6 +51,13 @@
 #define POINT_SIZE             20
 /* the side of the square of a choice, the editor's default */
 #define CHOICE_SIZE            40
+/* the arrange: the pull of a seeded vertex toward its place in the seed; the
+   largest stretch of the seed over the median one; seeded vertices in line
+   across the flow when their scaled distance is under this share of the
+   larger extent (the middle half of it) */
+#define SEED_PULL              1.0
+#define SEED_PULL_STRETCH      3.0
+#define SEED_ALIGN             0.25
 #define NODE_GAP               40
 #define LAYER_GAP              60
 #define LABEL_WIDTH            80

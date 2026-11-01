@@ -52,6 +52,7 @@ void htree_default_layout_options(HTLayoutOptions* opts)
 	opts->node_height = NODE_HEIGHT;
 	opts->point_size = POINT_SIZE;
 	opts->choice_size = CHOICE_SIZE;
+	opts->seed_pull = SEED_PULL;
 	opts->label_width = LABEL_WIDTH;
 	opts->label_height = LABEL_HEIGHT;
 }
@@ -77,6 +78,7 @@ int htree_layout_check_options(const HTLayoutOptions* in, HTLayoutOptions* out)
 	if (out->node_height <= 0.0) out->node_height = NODE_HEIGHT;
 	if (out->point_size <= 0.0) out->point_size = POINT_SIZE;
 	if (out->choice_size <= 0.0) out->choice_size = CHOICE_SIZE;
+	if (out->seed_pull < 0.0) out->seed_pull = SEED_PULL;    /* 0: the order alone */
 	if (out->label_width <= 0.0) out->label_width = LABEL_WIDTH;
 	if (out->label_height <= 0.0) out->label_height = LABEL_HEIGHT;
 	return HTREE_OK;
@@ -109,6 +111,8 @@ typedef struct {
 	double              seed_flow, seed_cross; /* its centre in the frame */
 	double              seed_w, seed_h;       /* its extent in the seed */
 	double              seed_flow_size;       /* its extent along the flow of the frame */
+	int                 pulled;               /* the arrange: it aims at its seed place */
+	double              pull_target;          /* that place across the flow, in the layout */
 	int                 seed_layer;  /* its band among the seeded vertices, 1.. */
 	std::vector<HTreeNode*> attached; /* the comments stacked after the vertex (the margin) */
 } HTLayoutVertex;
@@ -128,6 +132,7 @@ typedef struct {
 	HTFlowDirection                 direction;
 	int                             seeded;     /* the bands and the order of the seed */
 	int                             pinned;     /* the update: the seeded places kept */
+	double                          pull;       /* the arrange: the weight of the seed places */
 	std::vector<HTLayoutVertex>     vertices;   /* ENTRY, the children, EXIT, the dummies */
 	std::vector<HTLayoutEdge>       edges;
 	std::vector<std::vector<int> >  layers;     /* 0 = ENTRY .. last + 1 = EXIT */
@@ -662,6 +667,7 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 	g->direction = c.direction;
 	g->seeded = ctx->seeded;
 	g->pinned = ctx->pinned;
+	g->pull = ctx->seeded && !ctx->pinned ? ctx->opts.seed_pull : 0.0;
 	g->vertices.assign(n + 2, HTLayoutVertex());
 	g->entry = 0;
 	g->exit = (int)n + 1;
@@ -680,6 +686,8 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 		v.seed = 0;
 		v.seed_x = v.seed_y = v.seed_flow = v.seed_cross = 0.0;
 		v.seed_w = v.seed_h = v.seed_flow_size = 0.0;
+		v.pulled = 0;
+		v.pull_target = 0.0;
 		v.seed_layer = 0;
 		if (k >= 1 && k <= n) {
 			HTreeNode* node = c.children[k - 1];
@@ -976,6 +984,8 @@ static int htree_layout_add_dummy(HTLayoutGraph* g, HTLayoutVertexKind kind, int
 	v.seed = 0;
 	v.seed_x = v.seed_y = v.seed_flow = v.seed_cross = 0.0;
 	v.seed_w = v.seed_h = v.seed_flow_size = 0.0;
+	v.pulled = 0;
+	v.pull_target = 0.0;
 	v.seed_layer = 0;
 	g->vertices.push_back(v);
 	return (int)g->vertices.size() - 1;
@@ -1195,6 +1205,21 @@ static double htree_layout_gap(const HTLayoutGraph* g, const HTLayoutOptions* o,
 	return o->node_gap;
 }
 
+/* the place across the flow a vertex is held at: a drawn vertex of the
+   update, a seeded vertex of the arrange with the pull */
+static int htree_layout_aim(const HTLayoutGraph* g, const HTLayoutVertex& v, double* aim)
+{
+	if (g->pinned && v.seed) {
+		*aim = v.seed_cross;
+		return 1;
+	}
+	if (!g->pinned && v.pulled) {
+		*aim = v.pull_target;
+		return 1;
+	}
+	return 0;
+}
+
 static void htree_layout_pack_layer(HTLayoutGraph* g, const HTLayoutOptions* o, int l)
 {
 	const std::vector<int>& L = g->layers[l];
@@ -1203,7 +1228,8 @@ static void htree_layout_pack_layer(HTLayoutGraph* g, const HTLayoutOptions* o, 
 		HTLayoutVertex& v = g->vertices[L[i]];
 		if (i > 0) pos += htree_layout_gap(g, o, L[i - 1], L[i]) + v.before;
 		else pos = v.before;
-		if (g->pinned && v.seed && v.seed_cross > pos) pos = v.seed_cross;
+		double aim;
+		if (htree_layout_aim(g, v, &aim) && aim > pos) pos = aim;
 		v.cross = pos;
 		pos += v.after;
 	}
@@ -1256,9 +1282,8 @@ static void htree_layout_priority_pass(HTLayoutGraph* g, const HTLayoutOptions* 
 			off[i] = off[i - 1] + g->vertices[L[i - 1]].after +
 				htree_layout_gap(g, o, L[i - 1], L[i]) + v.before;
 		}
-		if (g->pinned && v.seed) {
-			/* a drawn vertex aims at its drawn place above every pull */
-			d[i] = v.seed_cross;
+		if (htree_layout_aim(g, v, &d[i])) {
+			/* a drawn or pulled vertex aims at its place above every pull */
 			w[i] = top * top;
 		} else if (nb.empty()) {
 			d[i] = v.cross;
@@ -1274,7 +1299,8 @@ static void htree_layout_priority_pass(HTLayoutGraph* g, const HTLayoutOptions* 
 	/* a block holding drawn vertices takes their mean: the drawn vertices
 	   stay pinned, the free ones yield (a weight alone still moves them) */
 	for (size_t i = 0; i < n; i++) {
-		int drawn = g->pinned && g->vertices[L[i]].seed;
+		double aim;
+		int drawn = htree_layout_aim(g, g->vertices[L[i]], &aim);
 		bsum.push_back(w[i] * d[i]);
 		bw.push_back(w[i]);
 		bdsum.push_back(drawn ? d[i] : 0.0);
@@ -1301,15 +1327,155 @@ static void htree_layout_priority_pass(HTLayoutGraph* g, const HTLayoutOptions* 
 	}
 }
 
-static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOptions* o)
+/* the band of every layer and the centres of the bands a layer gap apart */
+static void htree_layout_band_centres(const HTLayoutGraph* g, const HTLayoutOptions* o,
+									  std::vector<double>& band, std::vector<double>& centre)
+{
+	double start = 0.0;
+	band.assign(g->last + 2, 0.0);
+	centre.assign(g->last + 2, 0.0);
+	for (int l = 1; l <= g->last; l++) {
+		const std::vector<int>& L = g->layers[l];
+		for (size_t i = 0; i < L.size(); i++) {
+			if (g->vertices[L[i]].flow_size > band[l]) band[l] = g->vertices[L[i]].flow_size;
+		}
+		centre[l] = start + band[l] / 2.0;
+		start += band[l] + o->layer_gap;
+	}
+}
+
+/* the mean seed place along the flow of the seeded vertices of a layer */
+static int htree_layout_seed_flow(const HTLayoutGraph* g, int l, double* flow)
+{
+	const std::vector<int>& L = g->layers[l];
+	double sum = 0.0;
+	int n = 0;
+	for (size_t i = 0; i < L.size(); i++) {
+		const HTLayoutVertex& v = g->vertices[L[i]];
+		if (v.kind == htVertexReal && v.seed) { sum += v.seed_flow; n++; }
+	}
+	if (n) *flow = sum / n;
+	return n;
+}
+
+/* the ratios of the least distances of the layout to the seed distances:
+   the consecutive seeded vertices of a layer across the flow (with all the
+   vertices between), the consecutive seeded bands along it */
+static void htree_layout_seed_ratios(const HTLayoutGraph* g, const HTLayoutOptions* o,
+									 const std::vector<double>& centre, std::vector<double>& ratios)
+{
+	int prev = -1;
+	double prev_flow = 0.0;
+	for (int l = 1; l <= g->last; l++) {
+		const std::vector<int>& L = g->layers[l];
+		double need = 0.0, flow;
+		int last = -1;
+		for (size_t i = 0; i < L.size(); i++) {
+			const HTLayoutVertex& v = g->vertices[L[i]];
+			if (i > 0) need += g->vertices[L[i - 1]].after + htree_layout_gap(g, o, L[i - 1], L[i]) + v.before;
+			if (v.kind != htVertexReal || !v.seed) continue;
+			if (last >= 0) {
+				double gap = v.seed_cross - g->vertices[L[last]].seed_cross;
+				if (gap > HTREE_COORD_EPS) ratios.push_back(need / gap);
+			}
+			last = (int)i;
+			need = 0.0;
+		}
+		if (!htree_layout_seed_flow(g, l, &flow)) continue;
+		if (prev >= 1 && flow - prev_flow > HTREE_COORD_EPS) {
+			ratios.push_back((centre[l] - centre[prev]) / (flow - prev_flow));
+		}
+		prev = l;
+		prev_flow = flow;
+	}
+}
+
+/* the arrange: the seed scaled to the least distances of the layout - the
+   largest ratio, at most SEED_PULL_STRETCH times the median (the rough
+   boxes), the seed never pressed; the seeded vertices aim at their scaled
+   places across the flow, centred on the layout without the pull, the
+   share seed_pull of the way; the vertices drawn in line (SEED_ALIGN, one
+   per layer) aim at the mean of their line. The scale, 0 when the seed
+   gives none */
+static double htree_layout_pull_targets(HTLayoutGraph* g, const HTLayoutOptions* o,
+										const std::vector<double>& centre)
+{
+	std::vector<double> ratios;
+	std::vector<std::pair<double, int> > line;
+	double sc = 0.0, c = 0.0, scale, median, share = g->pull < 1.0 ? g->pull : 1.0;
+	int n = 0;
+
+	htree_layout_seed_ratios(g, o, centre, ratios);
+	if (ratios.empty()) return 0.0;
+	std::sort(ratios.begin(), ratios.end());
+	median = ratios[ratios.size() / 2];
+	scale = ratios.back() < SEED_PULL_STRETCH * median ? ratios.back() : SEED_PULL_STRETCH * median;
+	if (scale < 1.0) scale = 1.0;
+	for (size_t k = 0; k < g->vertices.size(); k++) {
+		const HTLayoutVertex& v = g->vertices[k];
+		if (v.kind != htVertexReal || !v.seed || v.layer < 1) continue;
+		sc += v.seed_cross;
+		c += v.cross;
+		n++;
+	}
+	if (n == 0) return 0.0;
+	sc /= n;
+	c /= n;
+	for (size_t k = 0; k < g->vertices.size(); k++) {
+		const HTLayoutVertex& v = g->vertices[k];
+		if (v.kind == htVertexReal && v.seed && v.layer >= 1) line.push_back(std::make_pair(v.seed_cross, (int)k));
+	}
+	std::stable_sort(line.begin(), line.end());
+	for (size_t i = 0, first = 0; i <= line.size(); i++) {
+		int join = 0;
+		if (i > 0 && i < line.size()) {
+			const HTLayoutVertex& p = g->vertices[line[i - 1].second];
+			const HTLayoutVertex& v = g->vertices[line[i].second];
+			double extent = p.cross_size > v.cross_size ? p.cross_size : v.cross_size;
+			join = scale * (v.seed_cross - p.seed_cross) < SEED_ALIGN * extent;
+			for (size_t j = first; join && j < i; j++) {
+				if (g->vertices[line[j].second].layer == v.layer) join = 0;
+			}
+		}
+		if (i == 0 || join) continue;
+		double mean = 0.0;
+		for (size_t j = first; j < i; j++) mean += line[j].first;
+		mean /= (double)(i - first);
+		for (size_t j = first; j < i; j++) {
+			HTLayoutVertex& v = g->vertices[line[j].second];
+			v.pulled = 1;
+			v.pull_target = v.cross + share * (c + scale * (mean - sc) - v.cross);
+		}
+		first = i;
+	}
+	return scale;
+}
+
+static void htree_layout_priority_passes(HTLayoutGraph* g, const HTLayoutOptions* o)
 {
 	int t = (g->last + 1) / 2;
-	double start = 0.0;
-
-	for (int l = 1; l <= g->last; l++) htree_layout_pack_layer(g, o, l);
 	for (int l = 1; l <= g->last; l++) htree_layout_priority_pass(g, o, l, 1);
 	for (int l = g->last - 1; l >= 1; l--) htree_layout_priority_pass(g, o, l, 0);
 	for (int l = t < 1 ? 1 : t; l <= g->last; l++) htree_layout_priority_pass(g, o, l, 1);
+}
+
+static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOptions* o)
+{
+	double start = 0.0, scale = 0.0, first_flow = 0.0, first_centre = 0.0;
+	std::vector<double> band, centre;
+	int first = -1;
+
+	for (int l = 1; l <= g->last; l++) htree_layout_pack_layer(g, o, l);
+	htree_layout_priority_passes(g, o);
+	if (!g->pinned && g->pull > 0.0) {
+		/* the arrange: the passes again, the seeded vertices pulled */
+		htree_layout_band_centres(g, o, band, centre);
+		scale = htree_layout_pull_targets(g, o, centre);
+		if (scale > 0.0) {
+			for (int l = 1; l <= g->last; l++) htree_layout_pack_layer(g, o, l);
+			htree_layout_priority_passes(g, o);
+		}
+	}
 
 	if (g->pinned) {
 		/* the drawn bands keep their drawn flow positions, shifted as a whole
@@ -1364,12 +1530,26 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 	}
 	for (int l = 1; l <= g->last; l++) {
 		const std::vector<int>& L = g->layers[l];
-		double band = 0.0;
+		double band = 0.0, at, flow;
 		for (size_t i = 0; i < L.size(); i++) {
 			if (g->vertices[L[i]].flow_size > band) band = g->vertices[L[i]].flow_size;
 		}
-		for (size_t i = 0; i < L.size(); i++) g->vertices[L[i]].flow = start + band / 2.0;
-		start += band + o->layer_gap;
+		at = start + band / 2.0;
+		if (scale > 0.0 && htree_layout_seed_flow(g, l, &flow)) {
+			/* the arrange: a seeded band at its seed place, never closer
+			   than the layer gap to the band before */
+			if (first < 0) {
+				first = l;
+				first_flow = flow;
+				first_centre = at;
+			} else {
+				double target = first_centre + scale * (flow - first_flow);
+				double pull = g->pull < 1.0 ? g->pull : 1.0;
+				if (target > at) at += pull * (target - at);
+			}
+		}
+		for (size_t i = 0; i < L.size(); i++) g->vertices[L[i]].flow = at;
+		start = at + band / 2.0 + o->layer_gap;
 	}
 	g->vertices[g->entry].flow = 0.0;
 	g->vertices[g->exit].flow = start > o->layer_gap ? start - o->layer_gap : 0.0;

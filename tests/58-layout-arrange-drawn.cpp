@@ -1,7 +1,8 @@
 /* -----------------------------------------------------------------------------
  * The Cyberiada Hierarchical Tree Geometry library implemention
  *
- * The layout test: the arrange of a drawn document
+ * The layout test: the arrange of a drawn document, with the pull and by the
+ * order alone
  *
  * Copyright (C) 2026 Alexey Fedoseev <aleksey@fedoseev.net>
  *
@@ -21,6 +22,9 @@
 
 #include "layout-check.h"
 
+/* the distance between the drawn centres of the chain */
+#define DRAWN_STEP 550.0
+
 static int same_geometry(const HTreeNode* a, const HTreeNode* b)
 {
 	for (; a && b; a = a->next, b = b->next) {
@@ -35,8 +39,8 @@ static int same_geometry(const HTreeNode* a, const HTreeNode* b)
 
 int main(void)
 {
-	HTree *tree, *tree_full;
-	HTDocument *doc, *full;
+	HTree *tree, *tree_full, *tree_order;
+	HTDocument *doc, *full, *order;
 	HTreeNode *sm, *a, *b, *c, *note;
 	HTreeEdge *ab, *bc, *link;
 	HTLayoutOptions opts;
@@ -63,19 +67,27 @@ int main(void)
 	link = lc_edge(tree, "e-note-b", note, b, 0.0, 0.0);
 	htree_edge_set_link(link, htEdgeLink, NULL);
 
-	/* the full layout of the same structure */
+	/* the full layout of the same structure; the arrange by the order alone */
 	full = htree_copy_document(doc);
 	tree_full = full->trees;
 	printf("reconstruct: %d\n", htree_reconstruct_document_geometry(full, 1, &opts));
+	order = htree_copy_document(doc);
+	tree_order = order->trees;
+	opts.seed_pull = 0.0;
+	printf("arrange by the order: %d\n", htree_arrange_document_geometry(order, 1, &opts));
+	lc_check(same_geometry(tree_order->nodes, tree_full->nodes), "the order alone gives the full layout", "drawn");
+	htree_default_layout_options(&opts);
 	printf("arrange: %d\n", htree_arrange_document_geometry(doc, 1, &opts));
 	lc_check(lc_cx(a) < lc_cx(b) && lc_cx(b) < lc_cx(c), "the drawn order kept", "drawn");
 	lc_check(fabs(lc_cy(a) - lc_cy(b)) < LC_EPS && fabs(lc_cy(b) - lc_cy(c)) < LC_EPS, "one row", "drawn");
 	lc_check(lc_bends(ab) == 0 && ab->source_point && fabs(ab->source_point->x - (a->rect->x + a->rect->width)) < LC_EPS,
 			 "the drawn route rebuilt", "drawn");
-	lc_check(same_geometry(tree->nodes, tree_full->nodes), "the full layout of the same order", "drawn");
+	lc_check(fabs(lc_cx(b) - lc_cx(a) - DRAWN_STEP) < LC_EPS && fabs(lc_cx(c) - lc_cx(b) - DRAWN_STEP) < LC_EPS,
+			 "the drawn distances kept", "drawn");
 	lc_check(lc_count_comment_hits(tree) == 0, "the comment clear", "drawn");
 	lc_check(htree_check_geometry(doc) == HTREE_OK, "geometry check", "drawn");
 	htree_print_document(doc);
+	htree_destroy_document(order);
 	htree_destroy_document(full);
 	htree_destroy_document(doc);
 	return lc_failures ? 1 : 0;

@@ -11,7 +11,9 @@ Added:
   seeded by the existing geometry - the bands read in the seed's own
   extents, the order in a layer and the flow directions kept, the seed rects
   as the minimum sizes; the places, the routes with their label dummies and
-  the comments of the full layout, nothing pinned (tests 54-58);
+  the comments of the full layout, nothing pinned (tests 54-58); the pull
+  (`HTLayoutOptions::seed_pull`): the seeded vertices at their seed places
+  scaled to the least distances, the rows drawn askew in line (test 61);
 - the comment links: the edge kind `HTEdgeType` and the commented edge of a link
   to a transition (`htree_edge_set_link`, `htree_find_edge_by_id`); the
   reconstruction attaches the links to the borders, a link to a transition on its

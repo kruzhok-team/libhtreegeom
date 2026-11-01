@@ -703,8 +703,8 @@ idempotence.
 ### The arrange
 
 `htree_arrange_document_geometry` lays a document out anew and takes from
-its geometry (the seed) the arrangement a drawing tells, not its
-coordinates: a sketch, a picture read by a model, a diagram of another
+its geometry (the seed) the arrangement a drawing tells and, with the
+pull, its places: a sketch, a picture read by a model, a diagram of another
 tool. The seed is read, then the geometry is cleaned as for the full
 layout and the layered layout runs with the seed's rules of the update and
 none of its pins.
@@ -725,11 +725,40 @@ none of its pins.
     the rect sizes    ------->  the minimum sizes: a leaf at least its seed
                                    rect, a fitted container at least its seed
                                    rect (the title band stays the preset)
+    the node centres  ------->  P6 the pull: the seeded places scaled to
+                                   the least distances, aimed at (below)
     the edges, the    ------->  dropped: the routes, the label dummies and
     comments                       the comments of the full layout
                                    P6 places, P8 fits, P9 routes, P10 places
                                    them, nothing pinned
 ```
+
+The pull (`HTLayoutOptions::seed_pull`, the share of the way from the
+layered places to the seed places; 1 by default, 0 the order alone). P6 runs
+in a container as in the full layout, then:
+
+```
+    the least distances     the scale s              the aims
+    of the layout     --->  the largest ratio  --->  across: the layered mean
+    (the layered packing)   least / seed, at most     + s (seed - the seed mean),
+    the seed distances      SEED_PULL_STRETCH x the    a line at its mean;
+    (consecutive seeded     median (the rough boxes),  along: the first seeded
+    vertices of a layer,    never under 1 (the seed    band + s (seed - its seed),
+    consecutive seeded      never pressed)             never closer than the
+    bands)                                             layer gap
+                                                         |
+                            the layers packed again, the passes with the aims
+                            above every pull (the update's drawn places): the
+                            order and the gaps kept, the dummies follow
+```
+
+A line is the seeded vertices drawn in line across the flow: their scaled
+distance under `SEED_ALIGN` of the larger extent (the centre in the middle
+half), one vertex of a layer, so a row drawn askew stays a row. The scale
+fits the tightest pair, so a drawn layout that is already tight - a full
+layout, an arranged one - maps onto itself: the fixed point. An outlier pair
+(the boxes drawn on each other) does not blow the seed up; the passes push
+it apart.
 
 The rules: the bands are read in the seed's own extents - its rect sizes,
 a point as the point size - since a seed has its own scale (a picture is
@@ -742,7 +771,9 @@ row in the document order.
 The guarantees: the bands, the order in a layer and the flow direction of
 the seeded vertices are kept; a seeded node is at least its seed size; a
 full layout used as the seed keeps its arrangement; the arrange of an
-arranged document changes nothing. Tests 54-58.
+arranged document changes nothing; with the pull, a loose seed keeps its
+distances and a tight one its proportions, the pull 0 the order alone.
+Tests 54-58, 61.
 
 ## The Interface
 
@@ -888,11 +919,15 @@ on the result before printing it:
 * 57 the arrange with a large seed rect, a seeded composite and an
   unseeded vertex: the minimum sizes, the title band, the insertion;
 * 58 the arrange of a drawn document: the routes and the comments of the
-  full layout, nothing pinned;
+  full layout, nothing pinned; a row drawn askew a row, the drawn distances
+  kept, the order alone the full layout;
 * 59 a choice is a square: the choice size in the full layout and the
   fill-in, the larger side of a preset or a seed;
 * 60 the transitions of a choice end at its tips: the full layout, the
-  update, the arrange, the fill-in and a drawn flat choice.
+  update, the arrange, the fill-in and a drawn flat choice;
+* 61 the pull of the arrange: a loose seed's distances, a tight seed's
+  proportions, the offsets and lines across the flow, the fixed point, the
+  share, an outlier pair.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness
