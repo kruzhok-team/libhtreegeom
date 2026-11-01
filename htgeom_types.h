@@ -58,6 +58,8 @@
 #define SEED_PULL              1.0
 #define SEED_PULL_STRETCH      3.0
 #define SEED_ALIGN             0.25
+/* the orthogonal routing: the distance between the channels of a gap */
+#define CHANNEL_GAP            20
 #define NODE_GAP               40
 #define LAYER_GAP              60
 #define LABEL_WIDTH            80

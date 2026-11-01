@@ -117,6 +117,11 @@ border). The allocating functions return NULL on failure.
 * `HTLayoutOptions::choice_size` - the side of the square of a choice
   (`CHOICE_SIZE`, 40: the editor's default); a transition end on a choice is
   the tip of its rhombus facing the other end
+* `HTLayoutOptions::routing` - the shape of the routes: `htRoutingPolyline`
+  (the default) the straight segments through the bends of the layers,
+  `htRoutingOrthogonal` the runs along and across the flow - the ends
+  spread on the sides facing the flow, the turns in the channels of the
+  gaps (`docs/reconstruction.md`, P9 orthogonal)
 * `HTLayoutOptions::seed_pull` - the arrange: the share of the way from the
   layered places to the seed places, scaled to the least distances
   (`SEED_PULL`, 1; 0 the order alone, a negative value the default)

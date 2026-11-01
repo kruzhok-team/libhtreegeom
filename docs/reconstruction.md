@@ -541,6 +541,43 @@ placed:
   point is produced (a label carries either the point or the rect); a
   transition without a preset label rect gets no label geometry.
 
+### P9 orthogonal
+
+`HTLayoutOptions::routing` = `htRoutingOrthogonal` routes the transitions
+in runs along and across the flow (the polylines above are the default).
+The cross places of P6 stay; then, per container:
+
+```
+ the ports           the ends of a real vertex spread evenly along its side
+                     facing the next layer (the outgoing) and the previous
+                     one (the incoming), ordered by the other point of the
+                     step; a choice at its tips, a point at itself
+ the steps           a step of a chain between adjacent layers whose ends
+                     differ across the flow runs: along - across - along
+ the channels        the steps of a gap sharing an end (a fan) are a group;
+                     overlapping groups take different channels, the group
+                     nearer the layer before when it crosses fewer (its
+                     run over the starts of the other, the ends of the other
+                     over its run); the cycles broken by the depth-first
+                     search, the channel the longest path (the orthogonal
+                     router of ELK Layered)
+ the gaps            a gap is max(layer gap, (channels + 1) x CHANNEL_GAP),
+                     the channels spread evenly over the gap as placed
+ the pieces          the port, the turns in the channels, the port; a dummy
+                     runs straight through its band, a label beside its run
+```
+
+The joins - a piece to the next across a container border, the ends -
+are turned square in the document: a point on a side of a box gets a stub
+across the side (inward when the other point is inside the box), then the
+first way clear of every node box (the comments and the regions aside):
+one turn, the way the run goes preferred; else a detour - the shortest
+way in axis runs over the lines a padding half off the boxes, a turn
+costing `HTREE_LAYOUT_BEND`; else a step halfway. The repeated and the
+straight-through points are dropped. The ports spread the transitions
+between one pair of states, so they are not spread again. A self-loop
+stays the side loop. Tests 62-65.
+
 ### P10 the comments
 
 The comments are content: they are placed inside their own container,
@@ -928,7 +965,15 @@ on the result before printing it:
   update, the arrange, the fill-in and a drawn flat choice;
 * 61 the pull of the arrange: a loose seed's distances, a tight seed's
   proportions, the offsets and lines across the flow, the fixed point, the
-  share, an outlier pair.
+  share, an outlier pair;
+* 62 the orthogonal fans of a state and a choice in the frames down, right
+  and adaptive: the ends of the state spread on its side, the ends of the
+  choice at one tip, no runs on each other, no route through a state;
+* 63 the orthogonal transitions against the flow and a loop;
+* 64 the orthogonal routes across the border of a composite whose inner
+  flow runs along the outer one or across it: the border crossed once;
+* 65 the orthogonal routing in the update (the drawn routes kept) and the
+  arrange, the labels beside their runs, the polylines the default.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness

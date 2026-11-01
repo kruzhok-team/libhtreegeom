@@ -169,6 +169,14 @@ typedef enum {
 	                         the depth wins, the root start by the final result */
 } HTLayoutMode;
 
+/* the shape of the transition routes */
+typedef enum {
+	htRoutingPolyline = 0,  /* straight segments through the bends of the layers */
+	htRoutingOrthogonal     /* runs along and across the flow: the ends spread on the
+	                           sides facing the flow, the turns in the channels of the
+	                           gaps between the layers */
+} HTRouting;
+
 /* the layered layout options; a value <= 0 selects the library default */
 typedef struct {
 	HTFlowDirection         direction;    /* the root frame direction (the preferred start) */
@@ -183,6 +191,7 @@ typedef struct {
 	double                  point_size;   /* the pseudostate glyph size */
 	double                  choice_size;  /* the side of the square of a choice */
 	double                  seed_pull;    /* the arrange: the pull toward the seed places, 0 none */
+	HTRouting               routing;      /* the shape of the routes */
 	double                  label_width;  /* the default transition label size */
 	double                  label_height;
 } HTLayoutOptions;

@@ -381,4 +381,76 @@ static inline int lc_all_finite(const HTree* tree)
 	return 1;
 }
 
+/* the orthogonal routing: the segments of the transitions along no axis */
+static inline int lc_count_oblique(const HTree* tree)
+{
+	int total = 0;
+	for (const HTreeEdge* e = tree->edges; e; e = e->next) {
+		HTreePoint a[LC_MAX_CHAIN];
+		int n;
+		if (!lc_edge_is_transition(e)) continue;
+		n = lc_edge_chain(e, a, LC_MAX_CHAIN);
+		for (int i = 0; i + 1 < n; i++) {
+			if (fabs(a[i].x - a[i + 1].x) > LC_EPS && fabs(a[i].y - a[i + 1].y) > LC_EPS) total++;
+		}
+	}
+	return total;
+}
+
+/* the overlap of two collinear axis segments, 0 when they are not */
+static inline double lc_run_overlap(HTreePoint a, HTreePoint b, HTreePoint c, HTreePoint d)
+{
+	double lo, hi;
+	if (fabs(a.y - b.y) < LC_EPS && fabs(c.y - d.y) < LC_EPS && fabs(a.y - c.y) < LC_EPS) {
+		lo = fmax(fmin(a.x, b.x), fmin(c.x, d.x));
+		hi = fmin(fmax(a.x, b.x), fmax(c.x, d.x));
+		return hi - lo;
+	}
+	if (fabs(a.x - b.x) < LC_EPS && fabs(c.x - d.x) < LC_EPS && fabs(a.x - c.x) < LC_EPS) {
+		lo = fmax(fmin(a.y, b.y), fmin(c.y, d.y));
+		hi = fmin(fmax(a.y, b.y), fmax(c.y, d.y));
+		return hi - lo;
+	}
+	return 0.0;
+}
+
+/* the orthogonal routing: the runs of two transitions lying on each other,
+   the fans (a shared end point) aside */
+static inline int lc_count_shared_runs(const HTree* tree)
+{
+	int total = 0;
+	for (const HTreeEdge* e = tree->edges; e; e = e->next) {
+		HTreePoint a[LC_MAX_CHAIN];
+		int n;
+		if (!lc_edge_is_transition(e)) continue;
+		n = lc_edge_chain(e, a, LC_MAX_CHAIN);
+		for (const HTreeEdge* f = e->next; f; f = f->next) {
+			HTreePoint b[LC_MAX_CHAIN];
+			int m;
+			if (!lc_edge_is_transition(f)) continue;
+			m = lc_edge_chain(f, b, LC_MAX_CHAIN);
+			if (lc_same_point(a[0], b[0]) || lc_same_point(a[n - 1], b[m - 1])) continue;
+			for (int i = 0; i + 1 < n; i++) {
+				for (int j = 0; j + 1 < m; j++) {
+					if (lc_run_overlap(a[i], a[i + 1], b[j], b[j + 1]) > LC_EPS) total++;
+				}
+			}
+		}
+	}
+	return total;
+}
+
+/* the routes through their own ends: the border crossings of a transition
+   with its source and target states (the composites aside) */
+static inline int lc_count_own_crossings(const HTree* tree)
+{
+	int total = 0;
+	for (const HTreeEdge* e = tree->edges; e; e = e->next) {
+		if (!lc_edge_is_transition(e) || e->source == e->target) continue;
+		if (e->source->rect && !e->source->children) total += lc_count_border_crossings(e, e->source->rect);
+		if (e->target->rect && !e->target->children) total += lc_count_border_crossings(e, e->target->rect);
+	}
+	return total;
+}
+
 #endif

@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <queue>
 #include <set>
 #include <vector>
 
@@ -53,6 +54,7 @@ void htree_default_layout_options(HTLayoutOptions* opts)
 	opts->point_size = POINT_SIZE;
 	opts->choice_size = CHOICE_SIZE;
 	opts->seed_pull = SEED_PULL;
+	opts->routing = htRoutingPolyline;
 	opts->label_width = LABEL_WIDTH;
 	opts->label_height = LABEL_HEIGHT;
 }
@@ -79,6 +81,7 @@ int htree_layout_check_options(const HTLayoutOptions* in, HTLayoutOptions* out)
 	if (out->point_size <= 0.0) out->point_size = POINT_SIZE;
 	if (out->choice_size <= 0.0) out->choice_size = CHOICE_SIZE;
 	if (out->seed_pull < 0.0) out->seed_pull = SEED_PULL;    /* 0: the order alone */
+	if (out->routing != htRoutingOrthogonal) out->routing = htRoutingPolyline;
 	if (out->label_width <= 0.0) out->label_width = LABEL_WIDTH;
 	if (out->label_height <= 0.0) out->label_height = LABEL_HEIGHT;
 	return HTREE_OK;
@@ -126,6 +129,9 @@ typedef struct {
 	int                 seeded_ends;      /* both ends seeded (or outside the container) */
 	int                 drawn_ends;       /* the update: a new edge between two pinned vertices */
 	std::vector<int>    chain;            /* source, dummies, target by layer */
+	double              port_s, port_t;   /* the orthogonal routing: the ends across the flow,
+	                                         off the centres of the end vertices */
+	std::vector<int>    channel;          /* its channel in the gap after each step, 0 straight */
 } HTLayoutEdge;
 
 typedef struct {
@@ -133,6 +139,9 @@ typedef struct {
 	int                             seeded;     /* the bands and the order of the seed */
 	int                             pinned;     /* the update: the seeded places kept */
 	double                          pull;       /* the arrange: the weight of the seed places */
+	int                             orthogonal; /* the routes run along and across the flow */
+	std::vector<int>                channels;   /* the channels of the gap after a layer */
+	std::vector<double>             gaps;       /* the gap after a layer */
 	std::vector<HTLayoutVertex>     vertices;   /* ENTRY, the children, EXIT, the dummies */
 	std::vector<HTLayoutEdge>       edges;
 	std::vector<std::vector<int> >  layers;     /* 0 = ENTRY .. last + 1 = EXIT */
@@ -159,6 +168,7 @@ typedef struct {
 typedef struct {
 	HTreeEdge*              edge;
 	std::vector<HTreePoint> bends;      /* container coordinates, source to target */
+	std::vector<const HTreeNode*> boxes; /* the orthogonal routing: the node of a port */
 	int                     has_label;
 	HTreeRect               label;
 } HTLayoutPiece;
@@ -668,6 +678,7 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 	g->seeded = ctx->seeded;
 	g->pinned = ctx->pinned;
 	g->pull = ctx->seeded && !ctx->pinned ? ctx->opts.seed_pull : 0.0;
+	g->orthogonal = ctx->opts.routing == htRoutingOrthogonal;
 	g->vertices.assign(n + 2, HTLayoutVertex());
 	g->entry = 0;
 	g->exit = (int)n + 1;
@@ -742,6 +753,7 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 		   would push the drawn target band; its label goes beside the line */
 		e.has_label = s.has_label && !drawn_ends;
 		e.label_w = e.label_h = 0.0;
+		e.port_s = e.port_t = 0.0;
 		if (s.has_label) {
 			e.label_w = s.edge->label_rect->width > 0.0 ? s.edge->label_rect->width : o->label_width;
 			e.label_h = s.edge->label_rect->height > 0.0 ? s.edge->label_rect->height : o->label_height;
@@ -1451,6 +1463,240 @@ static double htree_layout_pull_targets(HTLayoutGraph* g, const HTLayoutOptions*
 	return scale;
 }
 
+/* the orthogonal routing: the extents of the node of a real vertex in the
+   frame, 0 for a point */
+static void htree_layout_node_frame(const HTLayoutGraph* g, const HTLayoutVertex& v, double* flow, double* cross)
+{
+	*flow = *cross = 0.0;
+	if (v.kind == htVertexReal && v.node && v.node->rect) {
+		htree_layout_size_to_frame(g->direction, v.node->rect->width, v.node->rect->height, flow, cross);
+	}
+}
+
+/* the cross of a point of a chain: the port of a real end, the line of a
+   dummy, the next point's for an end outside the container */
+static double htree_layout_chain_cross(const HTLayoutGraph* g, const HTLayoutEdge& e, size_t i)
+{
+	size_t m = e.chain.size() - 1;
+	const HTLayoutVertex& v = g->vertices[e.chain[i]];
+	if (v.kind == htVertexVirtual && m >= 1) {
+		size_t j = i == 0 ? 1 : m - 1;
+		if (g->vertices[e.chain[j]].kind != htVertexVirtual) return htree_layout_chain_cross(g, e, j);
+	}
+	if (v.kind == htVertexReal && i == 0) return v.cross + e.port_s;
+	if (v.kind == htVertexReal && i == m) return v.cross + e.port_t;
+	return v.cross;
+}
+
+/* the ports: the ends of a real vertex spread evenly along its side facing
+   the next layer (the outgoing) and the previous one (the incoming), in
+   the order of the other point of their step; a choice ends at its tips and
+   a point at itself, the centre */
+static void htree_layout_ports(HTLayoutGraph* g)
+{
+	std::vector<std::vector<std::pair<double, int> > > out(g->vertices.size()), in(g->vertices.size());
+	for (size_t k = 0; k < g->edges.size(); k++) {
+		HTLayoutEdge& e = g->edges[k];
+		size_t m = e.chain.size() - 1;
+		e.port_s = e.port_t = 0.0;
+		e.channel.assign(m, 0);
+		if (m < 1) continue;
+		out[e.chain[0]].push_back(std::make_pair(g->vertices[e.chain[1]].cross, (int)k));
+		in[e.chain[m]].push_back(std::make_pair(g->vertices[e.chain[m - 1]].cross, (int)k));
+	}
+	for (size_t v = 0; v < g->vertices.size(); v++) {
+		const HTLayoutVertex& vx = g->vertices[v];
+		double fs, cs;
+		if (vx.kind != htVertexReal) continue;
+		htree_layout_node_frame(g, vx, &fs, &cs);
+		if (vx.role == htRoleChoice || cs <= 0.0) continue;
+		for (int side = 0; side < 2; side++) {
+			std::vector<std::pair<double, int> >& ends = side ? in[v] : out[v];
+			std::stable_sort(ends.begin(), ends.end());
+			for (size_t i = 0; i < ends.size(); i++) {
+				double at = -cs / 2.0 + cs * (double)(i + 1) / (double)(ends.size() + 1);
+				if (side) g->edges[ends[i].second].port_t = at;
+				else g->edges[ends[i].second].port_s = at;
+			}
+		}
+	}
+}
+
+/* a step across the flow in a gap: its edge, its index in the chain, the
+   crosses it leaves and reaches, its group */
+typedef struct {
+	int     edge;
+	size_t  step;
+	double  a, b;
+	int     group;
+} HTLayoutStep;
+
+typedef struct {
+	double              lo, hi;
+	std::vector<double> starts, ends;
+} HTLayoutChannelGroup;
+
+static int htree_layout_strictly_in(double x, double lo, double hi)
+{
+	return x > lo + HTREE_COORD_EPS && x < hi - HTREE_COORD_EPS;
+}
+
+/* the crossings when the group s runs nearer the layer before than t: the
+   starts of t inside the run of s, the ends of s inside the run of t */
+static int htree_layout_channel_cost(const HTLayoutChannelGroup& s, const HTLayoutChannelGroup& t)
+{
+	int n = 0;
+	for (size_t i = 0; i < t.starts.size(); i++) n += htree_layout_strictly_in(t.starts[i], s.lo, s.hi);
+	for (size_t i = 0; i < s.ends.size(); i++) n += htree_layout_strictly_in(s.ends[i], t.lo, t.hi);
+	return n;
+}
+
+static int htree_layout_group_root(std::vector<int>& parent, int x)
+{
+	while (parent[x] != x) {
+		parent[x] = parent[parent[x]];
+		x = parent[x];
+	}
+	return x;
+}
+
+/* the channels of the gaps: a step across the flow between two layers runs
+   in a channel of the gap, one per group of steps sharing an end (a fan of
+   a choice or a point); overlapping groups take different channels, ordered
+   against the crossings - the preferences of the pairs, the cycles broken
+   by the depth-first search, the channel the longest path (the orthogonal
+   router of ELK Layered); a gap holds its channels CHANNEL_GAP apart */
+static void htree_layout_channels(HTLayoutGraph* g, const HTLayoutOptions* o)
+{
+	g->channels.assign(g->last + 2, 0);
+	g->gaps.assign(g->last + 2, o->layer_gap);
+	for (int l = 1; l < g->last; l++) {
+		std::vector<HTLayoutStep> steps;
+		std::vector<int> parent, gindex, level, state, indegree, order;
+		std::vector<HTLayoutChannelGroup> groups;
+		std::vector<std::vector<int> > after, dag;
+		std::vector<std::pair<int, size_t> > stack;
+		int channels = 0;
+
+		for (size_t k = 0; k < g->edges.size(); k++) {
+			const HTLayoutEdge& e = g->edges[k];
+			for (size_t i = 0; i + 1 < e.chain.size(); i++) {
+				HTLayoutStep s;
+				if (g->vertices[e.chain[i]].layer != l ||
+					g->vertices[e.chain[i + 1]].kind == htVertexVirtual) continue;
+				s.edge = (int)k;
+				s.step = i;
+				s.a = htree_layout_chain_cross(g, e, i);
+				s.b = htree_layout_chain_cross(g, e, i + 1);
+				s.group = -1;
+				if (std::fabs(s.a - s.b) > HTREE_COORD_EPS) steps.push_back(s);
+			}
+		}
+		if (steps.empty()) continue;
+		parent.resize(steps.size());
+		for (size_t s = 0; s < steps.size(); s++) parent[s] = (int)s;
+		for (size_t s = 0; s < steps.size(); s++) {
+			const HTLayoutEdge& es = g->edges[steps[s].edge];
+			int s0 = es.chain[steps[s].step], s1 = es.chain[steps[s].step + 1];
+			for (size_t u = s + 1; u < steps.size(); u++) {
+				const HTLayoutEdge& eu = g->edges[steps[u].edge];
+				int u0 = eu.chain[steps[u].step], u1 = eu.chain[steps[u].step + 1];
+				int start = s0 == u0 && g->vertices[s0].kind == htVertexReal &&
+					std::fabs(steps[s].a - steps[u].a) <= HTREE_COORD_EPS;
+				int end = s1 == u1 && g->vertices[s1].kind == htVertexReal &&
+					std::fabs(steps[s].b - steps[u].b) <= HTREE_COORD_EPS;
+				if (start || end) {
+					parent[htree_layout_group_root(parent, (int)u)] = htree_layout_group_root(parent, (int)s);
+				}
+			}
+		}
+		gindex.assign(steps.size(), -1);
+		for (size_t s = 0; s < steps.size(); s++) {
+			int r = htree_layout_group_root(parent, (int)s);
+			double lo = steps[s].a < steps[s].b ? steps[s].a : steps[s].b;
+			double hi = steps[s].a < steps[s].b ? steps[s].b : steps[s].a;
+			if (gindex[r] < 0) {
+				HTLayoutChannelGroup cg;
+				cg.lo = lo;
+				cg.hi = hi;
+				gindex[r] = (int)groups.size();
+				groups.push_back(cg);
+			}
+			HTLayoutChannelGroup& cg = groups[gindex[r]];
+			if (lo < cg.lo) cg.lo = lo;
+			if (hi > cg.hi) cg.hi = hi;
+			cg.starts.push_back(steps[s].a);
+			cg.ends.push_back(steps[s].b);
+			steps[s].group = gindex[r];
+		}
+
+		/* the preferences of the overlapping pairs: s before t is an arc */
+		after.resize(groups.size());
+		for (size_t s = 0; s < groups.size(); s++) {
+			for (size_t t2 = s + 1; t2 < groups.size(); t2++) {
+				if (groups[s].lo > groups[t2].hi + HTREE_COORD_EPS ||
+					groups[t2].lo > groups[s].hi + HTREE_COORD_EPS) continue;
+				if (htree_layout_channel_cost(groups[s], groups[t2]) <=
+					htree_layout_channel_cost(groups[t2], groups[s])) after[s].push_back((int)t2);
+				else after[t2].push_back((int)s);
+			}
+		}
+		/* the cycles: a back arc of the depth-first search is reversed */
+		dag.resize(groups.size());
+		state.assign(groups.size(), 0);
+		for (size_t r = 0; r < groups.size(); r++) {
+			if (state[r]) continue;
+			state[r] = 1;
+			stack.push_back(std::make_pair((int)r, (size_t)0));
+			while (!stack.empty()) {
+				int u = stack.back().first;
+				if (stack.back().second < after[u].size()) {
+					int v = after[u][stack.back().second++];
+					if (state[v] == 1) {
+						dag[v].push_back(u);
+					} else {
+						dag[u].push_back(v);
+						if (state[v] == 0) {
+							state[v] = 1;
+							stack.push_back(std::make_pair(v, (size_t)0));
+						}
+					}
+				} else {
+					state[u] = 2;
+					stack.pop_back();
+				}
+			}
+		}
+		/* the channels: the longest path from the layer before */
+		indegree.assign(groups.size(), 0);
+		level.assign(groups.size(), 1);
+		for (size_t u = 0; u < groups.size(); u++) {
+			for (size_t k = 0; k < dag[u].size(); k++) indegree[dag[u][k]]++;
+		}
+		for (size_t u = 0; u < groups.size(); u++) if (!indegree[u]) order.push_back((int)u);
+		for (size_t i = 0; i < order.size(); i++) {
+			int u = order[i];
+			for (size_t k = 0; k < dag[u].size(); k++) {
+				int v = dag[u][k];
+				if (level[u] + 1 > level[v]) level[v] = level[u] + 1;
+				if (--indegree[v] == 0) order.push_back(v);
+			}
+		}
+		for (size_t u = 0; u < groups.size(); u++) if (level[u] > channels) channels = level[u];
+		for (size_t s = 0; s < steps.size(); s++) {
+			g->edges[steps[s].edge].channel[steps[s].step] = level[steps[s].group];
+		}
+		g->channels[l] = channels;
+		if ((channels + 1) * CHANNEL_GAP > g->gaps[l]) g->gaps[l] = (channels + 1) * CHANNEL_GAP;
+	}
+}
+
+/* the gap after a layer: the layer gap, wider for the channels */
+static double htree_layout_gap_after(const HTLayoutGraph* g, const HTLayoutOptions* o, int l)
+{
+	return l >= 0 && l < (int)g->gaps.size() ? g->gaps[l] : o->layer_gap;
+}
+
 static void htree_layout_priority_passes(HTLayoutGraph* g, const HTLayoutOptions* o)
 {
 	int t = (g->last + 1) / 2;
@@ -1475,6 +1721,10 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 			for (int l = 1; l <= g->last; l++) htree_layout_pack_layer(g, o, l);
 			htree_layout_priority_passes(g, o);
 		}
+	}
+	if (g->orthogonal) {
+		htree_layout_ports(g);
+		htree_layout_channels(g, o);
 	}
 
 	if (g->pinned) {
@@ -1549,10 +1799,13 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 			}
 		}
 		for (size_t i = 0; i < L.size(); i++) g->vertices[L[i]].flow = at;
-		start = at + band / 2.0 + o->layer_gap;
+		start = at + band / 2.0 + htree_layout_gap_after(g, o, l);
 	}
 	g->vertices[g->entry].flow = 0.0;
-	g->vertices[g->exit].flow = start > o->layer_gap ? start - o->layer_gap : 0.0;
+	{
+		double gap = htree_layout_gap_after(g, o, g->last);
+		g->vertices[g->exit].flow = start > gap ? start - gap : 0.0;
+	}
 }
 
 /* the segment (x = flow, y = cross) meets the box */
@@ -1722,6 +1975,55 @@ static void htree_layout_normalise(HTLayoutGraph* g, double* flow_extent, double
 	*cross_extent = any ? c1 - c0 : 0.0;
 }
 
+/* the orthogonal routing: the extents of the bands along the flow */
+static void htree_layout_bands(const HTLayoutGraph* g, std::vector<double>& start, std::vector<double>& end)
+{
+	std::vector<int> any(g->last + 2, 0);
+	start.assign(g->last + 2, 0.0);
+	end.assign(g->last + 2, 0.0);
+	for (size_t v = 0; v < g->vertices.size(); v++) {
+		const HTLayoutVertex& vx = g->vertices[v];
+		double a = vx.flow - vx.flow_size / 2.0, b = vx.flow + vx.flow_size / 2.0;
+		if (vx.kind == htVertexVirtual || vx.layer < 1 || vx.layer > g->last) continue;
+		if (!any[vx.layer] || a < start[vx.layer]) start[vx.layer] = a;
+		if (!any[vx.layer] || b > end[vx.layer]) end[vx.layer] = b;
+		any[vx.layer] = 1;
+	}
+}
+
+/* the orthogonal routing: the piece of an edge in the layout direction - the
+   port on the side of a real end, the turns of a step in its channel */
+static void htree_layout_orthogonal_piece(const HTLayoutGraph* g, const HTLayoutEdge& e,
+										  const std::vector<double>& band_start,
+										  const std::vector<double>& band_end, HTLayoutPiece& piece)
+{
+	size_t m = e.chain.size() - 1;
+	for (size_t i = 0; i <= m; i++) {
+		const HTLayoutVertex& v = g->vertices[e.chain[i]];
+		HTreePoint p;
+		if (v.kind == htVertexReal && (i == 0 || i == m)) {
+			double fs, cs;
+			htree_layout_node_frame(g, v, &fs, &cs);
+			htree_layout_to_doc(g->direction, i == 0 ? v.flow + fs / 2.0 : v.flow - fs / 2.0,
+								htree_layout_chain_cross(g, e, i), &p.x, &p.y);
+			piece.bends.push_back(p);
+			piece.boxes.push_back(v.node);
+		}
+		if (i < m && i < e.channel.size() && e.channel[i] > 0) {
+			int l = v.layer;
+			double lo = band_end[l], room = band_start[l + 1] - band_end[l], f;
+			if (room < 0.0) room = 0.0;
+			f = lo + e.channel[i] * room / (g->channels[l] + 1);
+			htree_layout_to_doc(g->direction, f, htree_layout_chain_cross(g, e, i), &p.x, &p.y);
+			piece.bends.push_back(p);
+			piece.boxes.push_back(NULL);
+			htree_layout_to_doc(g->direction, f, htree_layout_chain_cross(g, e, i + 1), &p.x, &p.y);
+			piece.bends.push_back(p);
+			piece.boxes.push_back(NULL);
+		}
+	}
+}
+
 /* place the children, their attached comments and the shelf band, and record
    the edge pieces in the content coordinates */
 static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph* g)
@@ -1729,6 +2031,7 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 	HTLayoutContainer& c = ctx->containers[ci];
 	const HTLayoutOptions* o = &ctx->opts;
 	double flow_extent = 0.0, cross_extent = 0.0, cw, ch;
+	std::vector<double> band_start, band_end;
 
 	for (size_t v = 0; v < g->vertices.size(); v++) {
 		HTLayoutVertex& vx = g->vertices[v];
@@ -1763,12 +2066,14 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 		}
 	}
 	htree_layout_place_shelf(ctx, ci, g->direction, flow_extent, cross_extent, &cw, &ch);
+	if (g->orthogonal) htree_layout_bands(g, band_start, band_end);
 	for (size_t k = 0; k < g->edges.size(); k++) {
 		const HTLayoutEdge& e = g->edges[k];
 		HTLayoutPiece piece;
 		piece.edge = e.edge;
 		piece.has_label = 0;
 		htree_init_rect(&piece.label);
+		if (g->orthogonal) htree_layout_orthogonal_piece(g, e, band_start, band_end, piece);
 		for (size_t i = 1; i + 1 < e.chain.size(); i++) {
 			const HTLayoutVertex& d = g->vertices[e.chain[i]];
 			HTreePoint p;
@@ -1785,6 +2090,7 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 				piece.label.width = e.label_w;
 				piece.label.height = e.label_h;
 			}
+			if (g->orthogonal) continue;
 			if (d.layer < (int)g->band_drawn.size() && g->band_drawn[d.layer]) {
 				/* the update: in a drawn band the line runs along the whole
 				   band, so its ends clear the drawn neighbours */
@@ -1797,7 +2103,10 @@ static void htree_layout_apply_graph(HTLayoutContext* ctx, int ci, HTLayoutGraph
 			htree_layout_to_doc(g->direction, d.flow, d.cross, &p.x, &p.y);
 			piece.bends.push_back(p);
 		}
-		if (e.reversed) std::reverse(piece.bends.begin(), piece.bends.end());
+		if (e.reversed) {
+			std::reverse(piece.bends.begin(), piece.bends.end());
+			std::reverse(piece.boxes.begin(), piece.boxes.end());
+		}
 		c.pieces.push_back(piece);
 	}
 }
@@ -2379,6 +2688,7 @@ static void htree_layout_append_piece(const HTLayoutContext* ctx, int ci, const 
 		w.leaving = 0;
 		w.p.x = piece->bends[i].x + ox;
 		w.p.y = piece->bends[i].y + oy;
+		if (i < piece->boxes.size()) w.box = (HTreeNode*)piece->boxes[i];
 		wps.push_back(w);
 	}
 }
@@ -2409,6 +2719,338 @@ static void htree_layout_route_loop(HTLayoutContext* ctx, HTreeEdge* e)
 			e->label_rect->x = r->x + r->width + 2 * ctx->opts.padding + ctx->opts.padding / 2.0;
 			e->label_rect->y = r->y + r->height / 2.0 - h / 2.0;
 		}
+	}
+}
+
+/* the orthogonal routing: the side of its box a point of a route lies on
+   (-1 none: 0 left, 1 right, 2 top, 3 bottom) and the axis a run crosses
+   it along (0 none, 1 x, 2 y) */
+#define HTREE_LAYOUT_ALIGNED 0.01   /* two points this close on an axis are aligned */
+
+static int htree_layout_side(const HTreeNode* box, const HTreePoint& p)
+{
+	double d[4];
+	int best = 0;
+	if (!box || !box->rect) return -1;
+	d[0] = std::fabs(p.x - box->rect->x);
+	d[1] = std::fabs(p.x - box->rect->x - box->rect->width);
+	d[2] = std::fabs(p.y - box->rect->y);
+	d[3] = std::fabs(p.y - box->rect->y - box->rect->height);
+	for (int k = 1; k < 4; k++) if (d[k] < d[best]) best = k;
+	return d[best] > HTREE_LAYOUT_ALIGNED ? -1 : best;
+}
+
+static int htree_layout_side_axis(int side)
+{
+	return side < 0 ? 0 : (side < 2 ? 1 : 2);
+}
+
+/* 1 strictly inside the rect, -1 strictly outside, 0 on its border */
+static int htree_layout_rect_side(const HTreePoint& p, const HTreeRect* r)
+{
+	const double e = HTREE_LAYOUT_ALIGNED;
+	if (p.x < r->x - e || p.x > r->x + r->width + e || p.y < r->y - e || p.y > r->y + r->height + e) return -1;
+	if (p.x > r->x + e && p.x < r->x + r->width - e && p.y > r->y + e && p.y < r->y + r->height - e) return 1;
+	return 0;
+}
+
+/* an axis run crosses the border of a box or lies along it */
+static int htree_layout_run_hits(const HTreePoint& a, const HTreePoint& b, const HTreeNode* box)
+{
+	const double e = HTREE_LAYOUT_ALIGNED;
+	const HTreeRect* r = box ? box->rect : NULL;
+	int sa, sb;
+	if (!r) return 0;
+	sa = htree_layout_rect_side(a, r);
+	sb = htree_layout_rect_side(b, r);
+	if (sa * sb < 0) return 1;
+	if (std::fabs(a.y - b.y) <= e) {
+		double x0 = a.x < b.x ? a.x : b.x, x1 = a.x < b.x ? b.x : a.x;
+		if (x1 <= r->x + e || x0 >= r->x + r->width - e) return 0;
+		if (std::fabs(a.y - r->y) <= e || std::fabs(a.y - r->y - r->height) <= e) return 1;
+		return sa < 0 && sb < 0 && a.y > r->y && a.y < r->y + r->height;
+	}
+	if (std::fabs(a.x - b.x) <= e) {
+		double y0 = a.y < b.y ? a.y : b.y, y1 = a.y < b.y ? b.y : a.y;
+		if (y1 <= r->y + e || y0 >= r->y + r->height - e) return 0;
+		if (std::fabs(a.x - r->x) <= e || std::fabs(a.x - r->x - r->width) <= e) return 1;
+		return sa < 0 && sb < 0 && a.x > r->x && a.x < r->x + r->width;
+	}
+	return 0;
+}
+
+/* the stub of a point on a side of its box: a padding half across the
+   side, inward when the other point is inside the box, else outward */
+static HTreePoint htree_layout_stub(const HTLayoutContext* ctx, const HTreeNode* box, int side,
+									const HTreePoint& p, const HTreePoint& other)
+{
+	HTreePoint s = p;
+	double d = ctx->opts.padding / 2.0;
+	if (htree_layout_rect_side(other, box->rect) > 0) d = -d;
+	if (side == 0) s.x -= d;
+	else if (side == 1) s.x += d;
+	else if (side == 2) s.y -= d;
+	else s.y += d;
+	return s;
+}
+
+#define HTREE_LAYOUT_BEND 40.0   /* the length a turn of a detour costs */
+
+/* the boxes a route keeps off: the nodes of the tree, the comments and the
+   regions aside */
+static void htree_layout_obstacles(const HTreeNode* nodes, std::vector<const HTreeNode*>& out)
+{
+	for (const HTreeNode* n = nodes; n; n = n->next) {
+		if (n->rect && n->type != htRegion && !htree_node_is_comment(n)) out.push_back(n);
+		if (n->children) htree_layout_obstacles(n->children, out);
+	}
+}
+
+static int htree_layout_run_clear(const HTreePoint& a, const HTreePoint& b, const std::vector<const HTreeNode*>& boxes)
+{
+	for (size_t k = 0; k < boxes.size(); k++) if (htree_layout_run_hits(a, b, boxes[k])) return 0;
+	return 1;
+}
+
+/* a path of axis runs keeps off the borders of the boxes */
+static int htree_layout_path_clear(const HTreePoint& pa, const std::vector<HTreePoint>& mid, const HTreePoint& pc,
+								   const std::vector<const HTreeNode*>& boxes)
+{
+	HTreePoint prev = pa;
+	for (size_t i = 0; i <= mid.size(); i++) {
+		const HTreePoint& next = i < mid.size() ? mid[i] : pc;
+		if (!htree_layout_run_clear(prev, next, boxes)) return 0;
+		prev = next;
+	}
+	return 1;
+}
+
+static void htree_layout_unique(std::vector<double>& v)
+{
+	std::vector<double> out;
+	std::sort(v.begin(), v.end());
+	for (size_t i = 0; i < v.size(); i++) {
+		if (out.empty() || v[i] - out.back() > HTREE_LAYOUT_ALIGNED) out.push_back(v[i]);
+	}
+	v.swap(out);
+}
+
+static size_t htree_layout_find(const std::vector<double>& v, double x)
+{
+	size_t best = 0;
+	for (size_t i = 1; i < v.size(); i++) if (std::fabs(v[i] - x) < std::fabs(v[best] - x)) best = i;
+	return best;
+}
+
+/* a detour: the shortest way in axis runs, a turn costing HTREE_LAYOUT_BEND,
+   over the lines of the ends and a padding half off the sides of the boxes;
+   axis: the way the first point leaves (0 any, 1 x, 2 y) */
+static int htree_layout_detour(const HTLayoutContext* ctx, const HTreePoint& pa, const HTreePoint& pc, int axis,
+							   const std::vector<const HTreeNode*>& boxes, std::vector<HTreePoint>& mid)
+{
+	typedef std::pair<double, int> HTLayoutQueued;
+	std::vector<double> xs, ys, cost;
+	std::vector<int> from;
+	std::priority_queue<HTLayoutQueued, std::vector<HTLayoutQueued>, std::greater<HTLayoutQueued> > queue;
+	double pad = ctx->opts.padding / 2.0;
+	size_t nx, ny, ia, ja, ic, jc;
+	int goal = -1;
+
+	xs.push_back(pa.x); xs.push_back(pc.x);
+	ys.push_back(pa.y); ys.push_back(pc.y);
+	for (size_t k = 0; k < boxes.size(); k++) {
+		const HTreeRect* r = boxes[k]->rect;
+		xs.push_back(r->x - pad); xs.push_back(r->x + r->width + pad);
+		ys.push_back(r->y - pad); ys.push_back(r->y + r->height + pad);
+	}
+	htree_layout_unique(xs);
+	htree_layout_unique(ys);
+	nx = xs.size();
+	ny = ys.size();
+	ia = htree_layout_find(xs, pa.x); ja = htree_layout_find(ys, pa.y);
+	ic = htree_layout_find(xs, pc.x); jc = htree_layout_find(ys, pc.y);
+	/* a state: a grid point and the axis it was reached along (0 x, 1 y) */
+	cost.assign(nx * ny * 2, -1.0);
+	from.assign(nx * ny * 2, -1);
+	for (int d = 0; d < 2; d++) {
+		int s = (int)((ia * ny + ja) * 2 + d);
+		if (axis && axis - 1 != d) continue;
+		cost[s] = 0.0;
+		queue.push(std::make_pair(0.0, s));
+	}
+	while (!queue.empty()) {
+		HTLayoutQueued top = queue.top();
+		int s = top.second, d = s % 2;
+		size_t i = (size_t)(s / 2) / ny, j = (size_t)(s / 2) % ny;
+		queue.pop();
+		if (top.first > cost[s]) continue;
+		if (i == ic && j == jc) { goal = s; break; }
+		for (int k = 0; k < 4; k++) {
+			long ni = (long)i + (k == 0 ? -1 : k == 1 ? 1 : 0), nj = (long)j + (k == 2 ? -1 : k == 3 ? 1 : 0);
+			int nd = k < 2 ? 0 : 1, ns;
+			HTreePoint a, b;
+			double c;
+			if (ni < 0 || nj < 0 || ni >= (long)nx || nj >= (long)ny) continue;
+			a.x = xs[i]; a.y = ys[j];
+			b.x = xs[ni]; b.y = ys[nj];
+			if (!htree_layout_run_clear(a, b, boxes)) continue;
+			c = top.first + std::fabs(b.x - a.x) + std::fabs(b.y - a.y) + (nd != d ? HTREE_LAYOUT_BEND : 0.0);
+			ns = (int)((ni * ny + nj) * 2 + nd);
+			if (cost[ns] < 0.0 || c < cost[ns] - HTREE_COORD_EPS) {
+				cost[ns] = c;
+				from[ns] = s;
+				queue.push(std::make_pair(c, ns));
+			}
+		}
+	}
+	if (goal < 0) return 0;
+	{
+		std::vector<HTreePoint> path;
+		for (int s = goal; s >= 0; s = from[s]) {
+			HTreePoint p;
+			p.x = xs[(size_t)(s / 2) / ny];
+			p.y = ys[(size_t)(s / 2) % ny];
+			if (path.empty() || std::fabs(path.back().x - p.x) > HTREE_LAYOUT_ALIGNED ||
+				std::fabs(path.back().y - p.y) > HTREE_LAYOUT_ALIGNED) path.push_back(p);
+		}
+		std::reverse(path.begin(), path.end());
+		mid.clear();
+		for (size_t i = 1; i + 1 < path.size(); i++) mid.push_back(path[i]);
+	}
+	return 1;
+}
+
+/* the join of two points of a route in axis runs: the stubs of the points
+   on the sides of their boxes, then the first way clear of the boxes - a
+   turn (the way the first point goes preferred), a detour, else a step
+   halfway */
+static void htree_layout_join(const HTLayoutContext* ctx, const HTreePoint& a, const HTreeNode* ba, int axis_a,
+							  const HTreePoint& c, const HTreeNode* bc, const std::vector<const HTreeNode*>& boxes,
+							  std::vector<HTreePoint>& q, std::vector<const HTreeNode*>& qb)
+{
+	const double e = HTREE_LAYOUT_ALIGNED;
+	int side_a = htree_layout_side(ba, a), side_c = htree_layout_side(bc, c);
+	int need_c = htree_layout_side_axis(side_c), aligned_x = std::fabs(a.y - c.y) <= e;
+	int aligned_y = std::fabs(a.x - c.x) <= e, first, found = 0;
+	HTreePoint pa = a, pc = c, t;
+	std::vector<HTreePoint> best;
+
+	if (side_a >= 0) axis_a = htree_layout_side_axis(side_a);
+	if ((aligned_x && (!axis_a || axis_a == 1) && (!need_c || need_c == 1)) ||
+		(aligned_y && (!axis_a || axis_a == 2) && (!need_c || need_c == 2))) {
+		q.push_back(c);
+		qb.push_back(bc);
+		return;
+	}
+	if (side_a >= 0) pa = htree_layout_stub(ctx, ba, side_a, a, c);
+	if (side_c >= 0) pc = htree_layout_stub(ctx, bc, side_c, c, a);
+	first = axis_a == 2 || (!axis_a && (need_c == 1 ||
+			(!need_c && std::fabs(c.y - a.y) > std::fabs(c.x - a.x)))) ? 1 : 0;
+	for (int j = 0; j < 2 && !found; j++) {
+		int k = j == 0 ? first : 1 - first;
+		std::vector<HTreePoint> mid;
+		t.x = k == 0 ? pc.x : pa.x;
+		t.y = k == 0 ? pa.y : pc.y;
+		mid.push_back(t);
+		if (htree_layout_path_clear(pa, mid, pc, boxes)) {
+			best = mid;
+			found = 1;
+		}
+	}
+	if (!found) found = htree_layout_detour(ctx, pa, pc, axis_a, boxes, best);
+	if (!found) {
+		best.clear();
+		if (first == 0) {
+			t.x = (pa.x + pc.x) / 2.0; t.y = pa.y; best.push_back(t);
+			t.y = pc.y; best.push_back(t);
+		} else {
+			t.y = (pa.y + pc.y) / 2.0; t.x = pa.x; best.push_back(t);
+			t.x = pc.x; best.push_back(t);
+		}
+	}
+	if (side_a >= 0) { q.push_back(pa); qb.push_back(NULL); }
+	for (size_t i = 0; i < best.size(); i++) { q.push_back(best[i]); qb.push_back(NULL); }
+	if (side_c >= 0) { q.push_back(pc); qb.push_back(NULL); }
+	q.push_back(c);
+	qb.push_back(bc);
+}
+
+/* the route made orthogonal: the joins of the pieces, the containers and
+   the ends in axis runs (htree_layout_join), the repeated and the
+   straight-through points dropped */
+static void htree_layout_orthogonal_route(const HTLayoutContext* ctx, HTreeEdge* e,
+										  const std::vector<HTLayoutWaypoint>& wps)
+{
+	std::vector<HTreePoint> p, q;
+	std::vector<const HTreeNode*> b, qb, boxes;
+	HTreePolyline* pl;
+
+	if (!e->source_point || !e->target_point) return;
+	htree_layout_obstacles(ctx->tree->nodes, boxes);
+	p.push_back(*e->source_point);
+	b.push_back(e->source);
+	for (size_t i = 0; i < wps.size(); i++) {
+		p.push_back(wps[i].p);
+		b.push_back(wps[i].box);
+	}
+	p.push_back(*e->target_point);
+	b.push_back(e->target);
+
+	/* the repeated points: the inner one kept (exact, not through float) */
+	for (size_t i = 0; i < p.size(); i++) {
+		if (!q.empty() && std::fabs(q.back().x - p[i].x) <= HTREE_LAYOUT_ALIGNED &&
+			std::fabs(q.back().y - p[i].y) <= HTREE_LAYOUT_ALIGNED) {
+			if (q.size() == 1 && i + 1 < p.size()) q.back() = p[i];
+			if (!qb.back()) qb.back() = b[i];
+			continue;
+		}
+		q.push_back(p[i]);
+		qb.push_back(b[i]);
+	}
+	p.swap(q);
+	b.swap(qb);
+	q.clear();
+	qb.clear();
+
+	/* the joins */
+	q.push_back(p[0]);
+	qb.push_back(b[0]);
+	for (size_t i = 1; i < p.size(); i++) {
+		HTreePoint a = q.back();
+		int axis = 0;
+		if (q.size() > 1) {
+			/* a turn point keeps going the way it came */
+			const HTreePoint& z = q[q.size() - 2];
+			axis = std::fabs(z.y - a.y) <= HTREE_LAYOUT_ALIGNED ? 1 : 2;
+		}
+		htree_layout_join(ctx, a, qb.back(), axis, p[i], b[i], boxes, q, qb);
+	}
+
+	/* the points a straight run passes through */
+	p.clear();
+	for (size_t i = 0; i < q.size(); i++) {
+		if (p.size() >= 1 && i + 1 < q.size()) {
+			const HTreePoint& z = p.back();
+			const HTreePoint& n = q[i + 1];
+			if ((std::fabs(z.x - q[i].x) <= HTREE_LAYOUT_ALIGNED && std::fabs(q[i].x - n.x) <= HTREE_LAYOUT_ALIGNED) ||
+				(std::fabs(z.y - q[i].y) <= HTREE_LAYOUT_ALIGNED && std::fabs(q[i].y - n.y) <= HTREE_LAYOUT_ALIGNED)) {
+				continue;
+			}
+		}
+		p.push_back(q[i]);
+	}
+
+	*e->source_point = p.front();
+	*e->target_point = p.back();
+	if (e->polyline) htree_destroy_polyline(e->polyline);
+	e->polyline = NULL;
+	pl = NULL;
+	for (size_t i = 1; i + 1 < p.size(); i++) {
+		HTreePolyline* n = htree_new_polyline();
+		n->point = p[i];
+		if (pl) pl->next = n;
+		else e->polyline = n;
+		pl = n;
 	}
 }
 
@@ -2507,6 +3149,7 @@ static int htree_layout_route_edge(HTLayoutContext* ctx, HTreeEdge* e)
 			pl->point = wps[i].p;
 		}
 	}
+	if (ctx->opts.routing == htRoutingOrthogonal) htree_layout_orthogonal_route(ctx, e, wps);
 
 	/* the label: the slot of the tail piece, or beside the first segment;
 	   only the rect is set - a label carries either the point or the rect */
@@ -2523,7 +3166,7 @@ static int htree_layout_route_edge(HTLayoutContext* ctx, HTreeEdge* e)
 			e->label_rect->x = piece->label.x + ox;
 			e->label_rect->y = piece->label.y + oy;
 		} else {
-			HTreePoint a = *e->source_point, b = wps.empty() ? *e->target_point : wps.front().p;
+			HTreePoint a = *e->source_point, b = e->polyline ? e->polyline->point : *e->target_point;
 			e->label_rect->x = (a.x + b.x) / 2.0 + ctx->opts.padding;
 			e->label_rect->y = (a.y + b.y) / 2.0 - h / 2.0;
 		}
@@ -2683,7 +3326,8 @@ static int htree_layout_route_edges(HTLayoutContext* ctx)
 		res = htree_layout_route_edge(ctx, e);
 		if (res != HTREE_OK) return res;
 	}
-	htree_layout_spread_pairs(ctx);
+	/* the ports spread the orthogonal routes already */
+	if (ctx->opts.routing != htRoutingOrthogonal) htree_layout_spread_pairs(ctx);
 	return HTREE_OK;
 }
 
