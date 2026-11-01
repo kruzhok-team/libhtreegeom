@@ -35,6 +35,9 @@ void htree_shift_subtree(HTreeNode* node, double dx, double dy);
 int  htree_node_box(const HTreeNode* node, double* x, double* y, double* w, double* h);
 int  htree_attach_edge_minimal(HTreeEdge* edge);
 int  htree_project_edge_to_borders(HTreeEdge* edge);
+/* the tip of the rhombus of a choice facing a point: the midpoint of the side
+   of its rect toward the point; 0 for a node that is not a drawn choice */
+int  htree_choice_tip(const HTreeNode* n, const HTreePoint* toward, HTreePoint* tip);
 /* the missing ends of a comment link, the stored ones kept */
 int  htree_attach_link(HTreeEdge* edge);
 /* the side loop of a self-transition: on the right border, or on the bottom one */

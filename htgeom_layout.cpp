@@ -51,6 +51,7 @@ void htree_default_layout_options(HTLayoutOptions* opts)
 	opts->node_width = NODE_WIDTH;
 	opts->node_height = NODE_HEIGHT;
 	opts->point_size = POINT_SIZE;
+	opts->choice_size = CHOICE_SIZE;
 	opts->label_width = LABEL_WIDTH;
 	opts->label_height = LABEL_HEIGHT;
 }
@@ -75,6 +76,7 @@ int htree_layout_check_options(const HTLayoutOptions* in, HTLayoutOptions* out)
 	if (out->node_width <= 0.0) out->node_width = NODE_WIDTH;
 	if (out->node_height <= 0.0) out->node_height = NODE_HEIGHT;
 	if (out->point_size <= 0.0) out->point_size = POINT_SIZE;
+	if (out->choice_size <= 0.0) out->choice_size = CHOICE_SIZE;
 	if (out->label_width <= 0.0) out->label_width = LABEL_WIDTH;
 	if (out->label_height <= 0.0) out->label_height = LABEL_HEIGHT;
 	return HTREE_OK;
@@ -1731,6 +1733,15 @@ static void htree_layout_size_leaf(const HTLayoutContext* ctx, HTreeNode* node)
 	if (node->type == htPoint || node->rect) return;
 	node->rect = htree_new_rect();
 	node->rect->x = node->rect->y = 0.0;
+	if (node->role == htRoleChoice) {
+		/* a choice is a square: the choice size, else the larger side of its
+		   preset or its seed */
+		double w = node->min_rect ? node->min_rect->width : ctx->opts.choice_size;
+		double h = node->min_rect ? node->min_rect->height : ctx->opts.choice_size;
+		htree_layout_at_least_seed(ctx, node, &w, &h);
+		node->rect->width = node->rect->height = w > h ? w : h;
+		return;
+	}
 	node->rect->width = node->min_rect ? node->min_rect->width : ctx->opts.node_width;
 	node->rect->height = node->min_rect ? node->min_rect->height : ctx->opts.node_height;
 	htree_layout_at_least_seed(ctx, node, &node->rect->width, &node->rect->height);
@@ -2144,6 +2155,7 @@ static int htree_layout_border_crossing(const HTreeNode* box, double px, double 
 	memset(&b, 0, sizeof(b));
 	memset(&e, 0, sizeof(e));
 	a.type = htSimpleNode;
+	a.role = box->role;     /* a choice ends at its tips */
 	a.rect = box->rect;
 	a.point = box->point;
 	b.type = htPoint;

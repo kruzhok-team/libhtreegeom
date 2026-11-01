@@ -49,6 +49,8 @@
 
 /* the layered layout defaults (docs/reconstruction.md) */
 #define POINT_SIZE             20
+/* the side of the square of a choice, the editor's default */
+#define CHOICE_SIZE            40
 #define NODE_GAP               40
 #define LAYER_GAP              60
 #define LABEL_WIDTH            80

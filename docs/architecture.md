@@ -208,6 +208,6 @@ combinations), test 17 six levels of nested states, test 18 the
 border-to-center projection, tests 19-21 and 24 the reconstruction
 fill-in (the edge fill-in, the preserving shelf placement with the
 grow-only parents, the minimal attachment, the comment outside the
-border), tests 25-58 the layered layout, its update, its arrange and the comments
+border), tests 25-60 the layered layout, its update, its arrange, the comments and the choices
 (`tests/layout-check.h` holds
 the builders and the readability checks).

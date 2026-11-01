@@ -181,6 +181,7 @@ typedef struct {
 	double                  node_width;   /* the default state size */
 	double                  node_height;
 	double                  point_size;   /* the pseudostate glyph size */
+	double                  choice_size;  /* the side of the square of a choice */
 	double                  label_width;  /* the default transition label size */
 	double                  label_height;
 } HTLayoutOptions;

@@ -733,6 +733,46 @@ static int htree_convert_edges_geometry_to_absolute_points(HTDocument* doc)
 
 /* Fill the missing edge ends with the node centers and project both
    ends onto the node borders */
+int htree_choice_tip(const HTreeNode* n, const HTreePoint* toward, HTreePoint* tip)
+{
+	double hw, hh, cx, cy, dx, dy;
+	if (!n || n->role != htRoleChoice || !n->rect) {
+		return 0;
+	}
+	hw = n->rect->width / 2.0;
+	hh = n->rect->height / 2.0;
+	if (hw <= 0.0 || hh <= 0.0) {
+		return 0;
+	}
+	cx = n->rect->x + hw;
+	cy = n->rect->y + hh;
+	dx = toward->x - cx;
+	dy = toward->y - cy;
+	/* the side the way out crosses, whatever the proportions of the rect
+	   (EDIT-EDGE-4 of the editor) */
+	if (std::fabs(dx) / hw >= std::fabs(dy) / hh) {
+		tip->x = cx + (dx >= 0.0 ? hw : -hw);
+		tip->y = cy;
+	} else {
+		tip->x = cx;
+		tip->y = cy + (dy >= 0.0 ? hh : -hh);
+	}
+	return 1;
+}
+
+/* a transition end on a choice is the tip facing the other end */
+static void htree_snap_choice_ends(HTreeEdge* edge, const HTreePoint* source_toward,
+								   const HTreePoint* target_toward)
+{
+	HTreePoint tip;
+	if (edge->source_point && htree_choice_tip(edge->source, source_toward, &tip)) {
+		*edge->source_point = tip;
+	}
+	if (edge->target_point && htree_choice_tip(edge->target, target_toward, &tip)) {
+		*edge->target_point = tip;
+	}
+}
+
 int htree_project_edge_to_borders(HTreeEdge* edge)
 {
 	if (!edge->source_point) {
@@ -788,6 +828,13 @@ int htree_project_edge_to_borders(HTreeEdge* edge)
 		if (res() && res.get().size() >= 1) {
 			homog_point_to_htree(res.get().front(), *edge->target_point);
 		}
+	}
+
+	{
+		HTreePoint source_toward, target_toward;
+		homog_point_to_htree(from_toward, source_toward);
+		homog_point_to_htree(to_toward, target_toward);
+		htree_snap_choice_ends(edge, &source_toward, &target_toward);
 	}
 
 	return HTREE_OK;
@@ -1660,8 +1707,8 @@ static int htree_reconstruct_nodes_geometry(HTreeNode* parent, const HTreeEdge* 
 				place = 1;
 			}
 		} else if (!node->rect) {
-			w = NODE_WIDTH;
-			h = NODE_HEIGHT;
+			w = node->role == htRoleChoice ? CHOICE_SIZE : NODE_WIDTH;
+			h = node->role == htRoleChoice ? CHOICE_SIZE : NODE_HEIGHT;
 			place = 1;
 		}
 		if (place) {
@@ -1816,6 +1863,10 @@ int htree_attach_edge_minimal(HTreeEdge* edge)
 		}
 		edge->source_point = htree_new_point_coord(px, py);
 		edge->target_point = htree_new_point_coord(qx, qy);
+		{
+			HTreePoint p = {px, py}, q = {qx, qy};
+			htree_snap_choice_ends(edge, &q, &p);
+		}
 		return 1;
 	}
 
@@ -1852,6 +1903,10 @@ int htree_attach_edge_minimal(HTreeEdge* edge)
 
 	edge->source_point = htree_new_point_coord(px, py);
 	edge->target_point = htree_new_point_coord(qx, qy);
+	{
+		HTreePoint p = {px, py}, q = {qx, qy};
+		htree_snap_choice_ends(edge, &q, &p);
+	}
 	return 1;
 }
 

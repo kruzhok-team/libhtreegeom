@@ -114,6 +114,9 @@ border). The allocating functions return NULL on failure.
   layout, containers only grow, the untouched transitions keep their
   routes (moved along when both ends moved alike, their ends kept on the
   border of a grown state); a `NULL` layout takes the defaults
+* `HTLayoutOptions::choice_size` - the side of the square of a choice
+  (`CHOICE_SIZE`, 40: the editor's default); a transition end on a choice is
+  the tip of its rhombus facing the other end
 * `htree_arrange_document_geometry(doc, reconstruct_sm, layout)` - the
   arrange: the layered layout anew, seeded by the existing geometry - the
   bands, the order in a layer and the flow direction of the seeded

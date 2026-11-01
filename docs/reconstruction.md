@@ -299,8 +299,9 @@ method:
 * the roles pin the vertices: the *source* roles (initial, entry point,
   shallow and deep history) go to the first layer, the *sink* roles
   (final, terminate, exit point) to the last layer; the choice, fork and
-  join are ordinary small vertices; a submachine state is an ordinary
-  vertex with its preset size.
+  join are ordinary small vertices - a choice is a square of the choice
+  size (the editor's 40), of the larger side of its preset or seed when it
+  has one; a submachine state is an ordinary vertex with its preset size.
 
 ```
     R                                          layout graph of R
@@ -601,9 +602,13 @@ The edge kind is `HTreeEdge::type` (`htEdgeLink`, `htEdgeChunkLink`; an
 untyped edge from a comment counts as a link to an element) and the
 commented transition is `target_edge`, set by `htree_edge_set_link`. The
 preserving reconstruction attaches the links after the transitions in the
-same way; neither moves a stored end. A link to a choice (`htRoleChoice`)
-ends on the rhombus inscribed in its rect, anywhere on its edges toward the
-comment, not only on the vertices a transition takes. The links do not route: a link may
+same way; neither moves a stored end. A transition end on a choice
+(`htRoleChoice`) is a tip of the rhombus inscribed in its rect: the midpoint
+of the side facing the other end, whatever the proportions of the rect (the
+editor's EDIT-EDGE-4), in every attachment and projection of the full
+layout, the update, the arrange and the fill-in; a stored end stays. A link
+to a choice ends on the rhombus anywhere on its edges toward the comment,
+not only on the tips a transition takes. The links do not route: a link may
 cross a state when its comment and its subject are far apart (an upward
 link from a nested container).
 
@@ -883,7 +888,11 @@ on the result before printing it:
 * 57 the arrange with a large seed rect, a seeded composite and an
   unseeded vertex: the minimum sizes, the title band, the insertion;
 * 58 the arrange of a drawn document: the routes and the comments of the
-  full layout, nothing pinned.
+  full layout, nothing pinned;
+* 59 a choice is a square: the choice size in the full layout and the
+  fill-in, the larger side of a preset or a seed;
+* 60 the transitions of a choice end at its tips: the full layout, the
+  update, the arrange, the fill-in and a drawn flat choice.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness
@@ -901,4 +910,4 @@ rate is removed from its report.
 * separate connected components placed side by side instead of one
   layering;
 * the submachine state contents (not laid out - a sized box);
-* the glyph shapes of the choice, fork and join (a small rect today).
+* the glyph shapes of the fork and the join (a small rect today).

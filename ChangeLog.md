@@ -3,6 +3,10 @@
 ## Version 1.3.0 (unreleased)
 
 Added:
+- the choice glyph: a choice is a square of `HTLayoutOptions::choice_size`
+  (40, the editor's default) instead of a state box, the larger side of its
+  preset or seed; a transition end on a choice is the tip of its rhombus
+  facing the other end (tests 59, 60);
 - the arrange (`htree_arrange_document_geometry`): the layered layout anew,
   seeded by the existing geometry - the bands read in the seed's own
   extents, the order in a layer and the flow directions kept, the seed rects
