@@ -770,8 +770,9 @@ row in the document order.
 
 The guarantees: the bands, the order in a layer and the flow direction of
 the seeded vertices are kept; a seeded node is at least its seed size; a
-full layout used as the seed keeps its arrangement; the arrange of an
-arranged document changes nothing; with the pull, a loose seed keeps its
+full layout used as the seed keeps its arrangement, its vertices nearly in
+line across the flow brought in line; the arrange of an arranged document
+changes nothing; with the pull, a loose seed keeps its
 distances and a tight one its proportions, the pull 0 the order alone.
 Tests 54-58, 61.
 
