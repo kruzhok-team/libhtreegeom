@@ -2165,7 +2165,7 @@ static int htree_layout_border_crossing(const HTreeNode* box, double px, double 
 	e.source = &a;
 	e.target = &b;
 	if (!htree_attach_edge_minimal(&e)) {
-		res = htree_project_edge_to_borders(&e);
+		res = htree_project_edge_to_borders(&e, 1);
 		if (res != HTREE_OK || !e.source_point) {
 			if (e.source_point) htree_destroy_point(e.source_point);
 			if (e.target_point) htree_destroy_point(e.target_point);
@@ -2307,7 +2307,7 @@ static int htree_layout_route_edge(HTLayoutContext* ctx, HTreeEdge* e)
 	/* the ends */
 	if (wps.empty()) {
 		if (!htree_attach_edge_minimal(e)) {
-			int res = htree_project_edge_to_borders(e);
+			int res = htree_project_edge_to_borders(e, 1);
 			if (res != HTREE_OK) return res;
 		}
 	} else {

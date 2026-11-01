@@ -34,7 +34,9 @@ void htree_clean_tree_geometry(HTreeNode* node);
 void htree_shift_subtree(HTreeNode* node, double dx, double dy);
 int  htree_node_box(const HTreeNode* node, double* x, double* y, double* w, double* h);
 int  htree_attach_edge_minimal(HTreeEdge* edge);
-int  htree_project_edge_to_borders(HTreeEdge* edge);
+/* tips: a new end on a choice is the tip of its rhombus (the layout, the
+   fill-in); a format conversion keeps the plain border projection */
+int  htree_project_edge_to_borders(HTreeEdge* edge, int tips);
 /* the tip of the rhombus of a choice facing a point: the midpoint of the side
    of its rect toward the point; 0 for a node that is not a drawn choice */
 int  htree_choice_tip(const HTreeNode* n, const HTreePoint* toward, HTreePoint* tip);

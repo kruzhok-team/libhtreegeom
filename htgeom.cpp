@@ -773,7 +773,7 @@ static void htree_snap_choice_ends(HTreeEdge* edge, const HTreePoint* source_tow
 	}
 }
 
-int htree_project_edge_to_borders(HTreeEdge* edge)
+int htree_project_edge_to_borders(HTreeEdge* edge, int tips)
 {
 	if (!edge->source_point) {
 		if (edge->source->rect) {
@@ -830,7 +830,7 @@ int htree_project_edge_to_borders(HTreeEdge* edge)
 		}
 	}
 
-	{
+	if (tips) {
 		HTreePoint source_toward, target_toward;
 		homog_point_to_htree(from_toward, source_toward);
 		homog_point_to_htree(to_toward, target_toward);
@@ -1017,7 +1017,7 @@ static int htree_convert_edges_geometry_to_absolute_borders(HTDocument* doc)
 		for (HTreeEdge* edge = tree->edges; edge; edge = edge->next) {
 			if (edge->source && (edge->source->rect || edge->source->point) &&
 				edge->target && (edge->target->rect || edge->target->point)) {
-				int res = htree_project_edge_to_borders(edge);
+				int res = htree_project_edge_to_borders(edge, 0);
 				if (res != HTREE_OK) {
 					return res;
 				}
@@ -1964,7 +1964,7 @@ static int htree_reconstruct_edges_geometry(HTreeEdge* edges)
 		if (edge->source == edge->target) {
 			htree_reconstruct_edge_loop(edge, 0);
 		} else if (!htree_attach_edge_minimal(edge)) {
-			int res = htree_project_edge_to_borders(edge);
+			int res = htree_project_edge_to_borders(edge, 1);
 			if (res != HTREE_OK) {
 				return res;
 			}
