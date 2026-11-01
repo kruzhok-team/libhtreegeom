@@ -567,7 +567,9 @@ The cross places of P6 stay; then, per container:
  the gaps            a gap is max(layer gap, (channels + 1) x CHANNEL_GAP),
                      the channels spread evenly over the gap as placed
  the pieces          the port, the turns in the channels, the port; a dummy
-                     runs straight through its band, a label beside its run
+                     runs straight through its band, a label beside its run;
+                     a run from or to the outside of the container crosses
+                     the band of its first or last dummy whole
 ```
 
 The joins - a piece to the next across a container border, the ends -

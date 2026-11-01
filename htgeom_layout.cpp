@@ -2050,6 +2050,14 @@ static void htree_layout_orthogonal_piece(const HTLayoutGraph* g, const HTLayout
 	for (size_t i = 0; i <= m; i++) {
 		const HTLayoutVertex& v = g->vertices[e.chain[i]];
 		HTreePoint p;
+		if (i == 1 && v.kind != htVertexReal && v.kind != htVertexVirtual &&
+			g->vertices[e.chain[0]].kind == htVertexVirtual) {
+			/* a run from the outside crosses the band of its dummy whole:
+			   its label beside it, the join before */
+			htree_layout_to_doc(g->direction, band_start[v.layer], htree_layout_chain_cross(g, e, i), &p.x, &p.y);
+			piece.bends.push_back(p);
+			piece.boxes.push_back(NULL);
+		}
 		if (v.kind == htVertexReal && (i == 0 || i == m)) {
 			double fs, cs;
 			htree_layout_node_frame(g, v, &fs, &cs);
@@ -2067,6 +2075,13 @@ static void htree_layout_orthogonal_piece(const HTLayoutGraph* g, const HTLayout
 			piece.bends.push_back(p);
 			piece.boxes.push_back(NULL);
 			htree_layout_to_doc(g->direction, f, htree_layout_chain_cross(g, e, i + 1), &p.x, &p.y);
+			piece.bends.push_back(p);
+			piece.boxes.push_back(NULL);
+		}
+		if (i + 1 == m && i >= 1 && v.kind != htVertexReal && v.kind != htVertexVirtual &&
+			g->vertices[e.chain[m]].kind == htVertexVirtual) {
+			/* a run to the outside likewise, the join after */
+			htree_layout_to_doc(g->direction, band_end[v.layer], htree_layout_chain_cross(g, e, i), &p.x, &p.y);
 			piece.bends.push_back(p);
 			piece.boxes.push_back(NULL);
 		}
