@@ -134,6 +134,11 @@ typedef struct {
 	int                 has_inner[2];     /* the source, the target: a composite end whose */
 	HTreePoint          inner[2];         /* inner run crosses its border here, off its centre, */
 	int                 inner_dir[2];     /* its inner flow running so */
+	int                 side[2];          /* the drawn side of the end (HTREE_SIDE_*, -1 none) */
+	int                 lat[2];           /* a port on a side along the flow: -1 the low cross
+	                                         side, 1 the high one, 0 none */
+	double              lat_flow[2];      /* its place along the side, off the centre */
+	double              lat_lane[2];      /* the lane of its run beside the vertex, off the centre */
 	std::vector<int>    channel;          /* its channel in the gap after each step, 0 straight */
 } HTLayoutEdge;
 
@@ -203,6 +208,8 @@ typedef struct {
 	std::map<const HTreeNode*, HTreePoint> seeds; /* the seeded layout: the centres before it */
 	std::map<const HTreeNode*, HTreeRect> seed_sizes; /* the arrange: the seed rects, the minimum sizes */
 	std::set<const HTreeEdge*>      edge_seeds;   /* the update: the edges that had geometry */
+	std::map<const HTreeEdge*, std::pair<int, int> > end_sides; /* the arrange, orthogonal: the
+	                                              drawn sides of the ends (HTREE_SIDE_*, -1 none) */
 	std::set<const HTreeEdge*>      routed;       /* the edges routed in this pass */
 	std::vector<HTreeNode*>         placed;       /* the update: the comments placed in this pass */
 } HTLayoutContext;
@@ -793,6 +800,17 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 		e.has_label = s.has_label && !drawn_ends;
 		e.label_w = e.label_h = 0.0;
 		e.port_s = e.port_t = 0.0;
+		e.side[0] = e.side[1] = -1;
+		e.lat[0] = e.lat[1] = 0;
+		e.lat_flow[0] = e.lat_flow[1] = e.lat_lane[0] = e.lat_lane[1] = 0.0;
+		{
+			std::map<const HTreeEdge*, std::pair<int, int> >::const_iterator sides = ctx->end_sides.find(s.edge);
+			if (sides != ctx->end_sides.end()) {
+				/* a drawn side holds for an end that is the child itself */
+				if (s.source_child >= 0 && c.children[s.source_child] == s.edge->source) e.side[0] = sides->second.first;
+				if (s.target_child >= 0 && c.children[s.target_child] == s.edge->target) e.side[1] = sides->second.second;
+			}
+		}
 		e.has_inner[0] = ctx->opts.routing == htRoutingOrthogonal && s.source_child >= 0 &&
 			htree_layout_inner_end(ctx, c.children[s.source_child], s.edge->source, s.edge, 1, &e.inner[0],
 								   &e.inner_dir[0]);
@@ -809,8 +827,10 @@ static void htree_layout_build_graph(const HTLayoutContext* ctx, int ci, HTLayou
 
 static void htree_layout_reverse_edge(HTLayoutEdge& e)
 {
-	int t = e.source, h = e.has_inner[0], d = e.inner_dir[0];
+	int t = e.source, h = e.has_inner[0], d = e.inner_dir[0], s = e.side[0];
 	HTreePoint p = e.inner[0];
+	e.side[0] = e.side[1];
+	e.side[1] = s;
 	e.source = e.target;
 	e.target = t;
 	e.has_inner[0] = e.has_inner[1];
@@ -1535,8 +1555,8 @@ static double htree_layout_chain_cross(const HTLayoutGraph* g, const HTLayoutEdg
 		size_t j = i == 0 ? 1 : m - 1;
 		if (g->vertices[e.chain[j]].kind != htVertexVirtual) return htree_layout_chain_cross(g, e, j);
 	}
-	if (v.kind == htVertexReal && i == 0) return v.cross + e.port_s;
-	if (v.kind == htVertexReal && i == m) return v.cross + e.port_t;
+	if (v.kind == htVertexReal && i == 0) return v.cross + (e.lat[0] ? e.lat_lane[0] : e.port_s);
+	if (v.kind == htVertexReal && i == m) return v.cross + (e.lat[1] ? e.lat_lane[1] : e.port_t);
 	return v.cross;
 }
 
@@ -1553,17 +1573,71 @@ static int htree_layout_inner_port(const HTLayoutGraph* g, const HTLayoutEdge& e
 	return e.has_inner[side] && !e.reversed && e.inner_dir[side] == (int)g->direction;
 }
 
-static void htree_layout_ports(HTLayoutGraph* g)
+/* the drawn side of an end in the frame: -1 the low cross side, 1 the high
+   one, 0 a side across the flow or none */
+static int htree_layout_lateral(const HTLayoutGraph* g, int side)
+{
+	if (g->direction == htFlowDown) return side == HTREE_SIDE_LEFT ? -1 : side == HTREE_SIDE_RIGHT ? 1 : 0;
+	return side == HTREE_SIDE_TOP ? -1 : side == HTREE_SIDE_BOTTOM ? 1 : 0;
+}
+
+/* the ports on the sides along the flow (the drawn sides): spread along the
+   side, the incoming nearer the layer before, the outgoing nearer the next
+   one; each runs out across to a lane in the node gap, the lane nearer the
+   vertex for the end nearer the way it goes, so the runs do not cross; a
+   choice at its tip */
+static void htree_layout_lateral_ports(HTLayoutGraph* g, const HTLayoutOptions* o)
+{
+	std::map<std::pair<int, int>, std::vector<std::pair<int, int> > > groups;  /* (vertex, lat) -> (end, edge) */
+	for (size_t k = 0; k < g->edges.size(); k++) {
+		HTLayoutEdge& e = g->edges[k];
+		size_t m = e.chain.size() - 1;
+		e.lat[0] = e.lat[1] = 0;
+		if (m < 1) continue;
+		for (int end = 1; end >= 0; end--) {
+			const HTLayoutVertex& v = g->vertices[e.chain[end ? m : 0]];
+			int lat = htree_layout_lateral(g, e.side[end]);
+			if (!lat || v.kind != htVertexReal || !v.node || !v.node->rect) continue;
+			e.lat[end] = lat;
+			groups[std::make_pair(e.chain[end ? m : 0], lat)].push_back(std::make_pair(end, (int)k));
+		}
+	}
+	for (std::map<std::pair<int, int>, std::vector<std::pair<int, int> > >::iterator it = groups.begin();
+		 it != groups.end(); ++it) {
+		const HTLayoutVertex& v = g->vertices[it->first.first];
+		std::vector<std::pair<int, int> >& ends = it->second;
+		size_t n = ends.size();
+		double fs, cs;
+		htree_layout_node_frame(g, v, &fs, &cs);
+		/* the incoming first (the ends listed target first), then the outgoing */
+		std::stable_sort(ends.begin(), ends.end(), std::greater<std::pair<int, int> >());
+		for (size_t p = 0; p < n; p++) {
+			HTLayoutEdge& e = g->edges[ends[p].second];
+			int end = ends[p].first;
+			size_t lane = end ? p : n - 1 - p;
+			if (v.role == htRoleChoice) {
+				e.lat_flow[end] = 0.0;
+				e.lat_lane[end] = it->first.second * (cs / 2.0 + o->node_gap / 2.0);
+			} else {
+				e.lat_flow[end] = -fs / 2.0 + fs * (double)(p + 1) / (double)(n + 1);
+				e.lat_lane[end] = it->first.second * (cs / 2.0 + o->node_gap * (double)(lane + 1) / (double)(n + 1));
+			}
+		}
+	}
+}
+
+static void htree_layout_ports(HTLayoutGraph* g, const HTLayoutOptions* o)
 {
 	std::vector<std::vector<std::pair<double, int> > > out(g->vertices.size()), in(g->vertices.size());
+	htree_layout_lateral_ports(g, o);
 	for (size_t k = 0; k < g->edges.size(); k++) {
 		HTLayoutEdge& e = g->edges[k];
 		size_t m = e.chain.size() - 1;
 		e.port_s = e.port_t = 0.0;
 		e.channel.assign(m, 0);
 		if (m < 1) continue;
-		out[e.chain[0]].push_back(std::make_pair(g->vertices[e.chain[1]].cross, (int)k));
-		in[e.chain[m]].push_back(std::make_pair(g->vertices[e.chain[m - 1]].cross, (int)k));
+		if (!e.lat[0]) out[e.chain[0]].push_back(std::make_pair(g->vertices[e.chain[1]].cross, (int)k));
+		if (!e.lat[1]) in[e.chain[m]].push_back(std::make_pair(g->vertices[e.chain[m - 1]].cross, (int)k));
 	}
 	for (size_t v = 0; v < g->vertices.size(); v++) {
 		const HTLayoutVertex& vx = g->vertices[v];
@@ -1843,7 +1917,7 @@ static void htree_layout_assign_coordinates(HTLayoutGraph* g, const HTLayoutOpti
 		}
 	}
 	if (g->orthogonal) {
-		htree_layout_ports(g);
+		htree_layout_ports(g, o);
 		htree_layout_straighten(g, o);
 		htree_layout_channels(g, o);
 	}
@@ -2130,7 +2204,19 @@ static void htree_layout_orthogonal_piece(const HTLayoutGraph* g, const HTLayout
 			piece.bends.push_back(p);
 			piece.boxes.push_back(NULL);
 		}
-		if (v.kind == htVertexReal && (i == 0 || i == m)) {
+		if (v.kind == htVertexReal && (i == 0 || i == m) && e.lat[i == 0 ? 0 : 1]) {
+			/* a port on a side along the flow, out across to its lane */
+			int end = i == 0 ? 0 : 1;
+			double fs, cs, f = v.flow + e.lat_flow[end];
+			HTreePoint q;
+			htree_layout_node_frame(g, v, &fs, &cs);
+			htree_layout_to_doc(g->direction, f, v.cross + e.lat[end] * cs / 2.0, &p.x, &p.y);
+			htree_layout_to_doc(g->direction, f, v.cross + e.lat_lane[end], &q.x, &q.y);
+			piece.bends.push_back(end ? q : p);
+			piece.boxes.push_back(end ? NULL : v.node);
+			piece.bends.push_back(end ? p : q);
+			piece.boxes.push_back(end ? v.node : NULL);
+		} else if (v.kind == htVertexReal && (i == 0 || i == m)) {
 			double fs, cs;
 			htree_layout_node_frame(g, v, &fs, &cs);
 			htree_layout_to_doc(g->direction, i == 0 ? v.flow + fs / 2.0 : v.flow - fs / 2.0,
@@ -3725,6 +3811,23 @@ static void htree_layout_collect_seeds(HTLayoutContext* ctx, HTreeNode* nodes)
 	}
 }
 
+/* the side of its drawn rect a drawn end lies on, -1 none or the centre */
+static int htree_layout_drawn_side(const HTreeNode* n, const HTreePoint* p)
+{
+	double d[4], cx, cy;
+	int best = 0;
+	if (!n || !p || !n->rect || n->rect->width <= 0.0 || n->rect->height <= 0.0) return -1;
+	cx = n->rect->x + n->rect->width / 2.0;
+	cy = n->rect->y + n->rect->height / 2.0;
+	if (std::fabs(p->x - cx) <= HTREE_COORD_EPS && std::fabs(p->y - cy) <= HTREE_COORD_EPS) return -1;
+	d[HTREE_SIDE_LEFT] = std::fabs(p->x - n->rect->x);
+	d[HTREE_SIDE_RIGHT] = std::fabs(p->x - n->rect->x - n->rect->width);
+	d[HTREE_SIDE_TOP] = std::fabs(p->y - n->rect->y);
+	d[HTREE_SIDE_BOTTOM] = std::fabs(p->y - n->rect->y - n->rect->height);
+	for (int k = 1; k < 4; k++) if (d[k] < d[best]) best = k;
+	return best;
+}
+
 static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayoutOptions* opts,
 								  HTFlowDirection start, HTRebuildMode mode, double* w, double* h)
 {
@@ -3748,7 +3851,15 @@ static int htree_layout_tree_pass(HTree* tree, int reconstruct_sm, const HTLayou
 			if (e->source_point || e->target_point || e->polyline || e->label_point) ctx.edge_seeds.insert(e);
 		}
 	} else {
-		/* the full layout and the arrange rebuild the geometry */
+		/* the full layout and the arrange rebuild the geometry; the arrange
+		   with the orthogonal routes keeps the drawn sides of the ends */
+		if (ctx.seeded && ctx.opts.routing == htRoutingOrthogonal) {
+			for (HTreeEdge* e = tree->edges; e; e = e->next) {
+				int s = htree_layout_drawn_side(e->source, e->source_point);
+				int t = htree_layout_drawn_side(e->target, e->target_point);
+				if (e->source != e->target && (s >= 0 || t >= 0)) ctx.end_sides[e] = std::make_pair(s, t);
+			}
+		}
 		if (tree->nodes) htree_clean_tree_geometry(tree->nodes);
 		for (HTreeEdge* e = tree->edges; e; e = e->next) {
 			if (e->source_point) { htree_destroy_point(e->source_point); e->source_point = NULL; }

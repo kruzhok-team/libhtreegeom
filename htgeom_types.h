@@ -60,6 +60,11 @@
 #define SEED_ALIGN             0.25
 /* the orthogonal routing: the distance between the channels of a gap */
 #define CHANNEL_GAP            20
+/* the sides of a rect */
+#define HTREE_SIDE_LEFT        0
+#define HTREE_SIDE_RIGHT       1
+#define HTREE_SIDE_TOP         2
+#define HTREE_SIDE_BOTTOM      3
 #define NODE_GAP               40
 #define LAYER_GAP              60
 #define LABEL_WIDTH            80

@@ -555,7 +555,8 @@ The cross places of P6 stay; then, per container:
                      inside a composite where its inner run (laid out before,
                      in the composite's graph or its region's) crosses the
                      border, when that flow runs as the outer one and the
-                     edge with it
+                     edge with it; an end drawn on a side along the flow (the
+                     arrange) on that side, below
  the straightening   the dummies of a chain move onto the line of its source
                      port, else of its target port, where every layer has
                      room: the chain runs straight from its end
@@ -583,7 +584,17 @@ first way clear of every node box (the comments and the regions aside):
 a straight run, one turn, the way the run goes preferred; else a detour - the shortest
 way in axis runs over the lines a padding half off the boxes, a turn
 costing `HTREE_LAYOUT_BEND`; else a step halfway. The repeated and the
-straight-through points are dropped. The ports spread the transitions
+straight-through points are dropped.
+
+The drawn sides. The arrange with the orthogonal routes reads, before the
+geometry goes, the side of its drawn rect each drawn end lies on (the
+centre none). An end whose vertex is the drawn node itself keeps a side
+along the flow: its port is on that side, the incoming nearer the layer
+before, the outgoing nearer the next one; it runs out across to a lane in
+the node gap (a lane nearer the vertex for the end nearer the way it goes),
+then along the flow to its channel; a choice from its tip. A side across
+the flow is the default one; a side against the flow is not kept. The
+polylines ignore the drawn sides. The ports spread the transitions
 between one pair of states, so they are not spread again. A self-loop
 stays the side loop. Tests 62-65.
 
@@ -982,7 +993,11 @@ on the result before printing it:
 * 64 the orthogonal routes across the border of a composite whose inner
   flow runs along the outer one or across it: the border crossed once;
 * 65 the orthogonal routing in the update (the drawn routes kept) and the
-  arrange, the labels beside their runs, the polylines the default.
+  arrange, the labels beside their runs, the polylines the default;
+* 66 the drawn sides in the orthogonal arrange: a transition from the bottom
+  of a state to the bottom of another under a third, the branches of a
+  choice from its top and bottom tips, a side against the flow not kept;
+  the polylines as without the drawn ends.
 
 The editor's polygon corpus is re-run in the `reconstruct` mode with the
 render-soundness checks and the readability measures; the closeness

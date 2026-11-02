@@ -17,7 +17,8 @@ Added:
 - the orthogonal routing (`HTLayoutOptions::routing`, `htRoutingOrthogonal`;
   the polylines stay the default): the ends spread on the sides facing the
   flow, the turns in the channels of the gaps, the joins and the ends turned
-  square clear of the nodes (tests 62-65);
+  square clear of the nodes (tests 62-65); the arrange keeps the drawn sides
+  of the ends along the flow (test 66);
 - the comment links: the edge kind `HTEdgeType` and the commented edge of a link
   to a transition (`htree_edge_set_link`, `htree_find_edge_by_id`); the
   reconstruction attaches the links to the borders, a link to a transition on its
