@@ -551,7 +551,11 @@ The cross places of P6 stay; then, per container:
  the ports           the ends of a real vertex spread evenly along its side
                      facing the next layer (the outgoing) and the previous
                      one (the incoming), ordered by the other point of the
-                     step; a choice at its tips, a point at itself
+                     step; a choice at its tips, a point at itself; an end
+                     inside a composite where its inner run (laid out before,
+                     in the composite's graph or its region's) crosses the
+                     border, when that flow runs as the outer one and the
+                     edge with it
  the straightening   the dummies of a chain move onto the line of its source
                      port, else of its target port, where every layer has
                      room: the chain runs straight from its end
@@ -576,7 +580,7 @@ The joins - a piece to the next across a container border, the ends -
 are turned square in the document: a point on a side of a box gets a stub
 across the side (inward when the other point is inside the box), then the
 first way clear of every node box (the comments and the regions aside):
-one turn, the way the run goes preferred; else a detour - the shortest
+a straight run, one turn, the way the run goes preferred; else a detour - the shortest
 way in axis runs over the lines a padding half off the boxes, a turn
 costing `HTREE_LAYOUT_BEND`; else a step halfway. The repeated and the
 straight-through points are dropped. The ports spread the transitions
