@@ -93,7 +93,10 @@ typedef struct _HTreeNode {
     struct _HTreeNode*      children;
     struct _HTreeNode*      next;
     HTNodeRole              role;          /* the layout role */
-    HTreeRect*              min_rect;      /* the preset minimum size (x, y ignored) */
+    HTreeRect*              min_rect;      /* the preset minimum size (x, y ignored); the
+                                              height of a container: its header band */
+    double                  footer;        /* a container: the height of its footer band
+                                              (the exit block), 0 none */
 } HTreeNode;
 
 /* the kind of an edge: a transition or a comment link from a comment node;
@@ -240,6 +243,8 @@ typedef struct {
 	void                    htree_node_set_rect(HTreeNode* node, float x, float y, float w, float h);
 	void                    htree_node_set_point(HTreeNode* node, float x, float y);
 	void                    htree_node_set_min_size(HTreeNode* node, double w, double h);
+	/* the footer band of a container: the exit block drawn at its bottom */
+	void                    htree_node_set_footer(HTreeNode* node, double h);
 	void                    htree_add_sibling_node(HTreeNode* node, HTreeNode* new_node);
 	void                    htree_add_child_node(HTreeNode* node, HTreeNode* new_node);
 	HTreeNode*              htree_copy_node(const HTreeNode* src);

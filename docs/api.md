@@ -45,7 +45,10 @@ border). The allocating functions return NULL on failure.
 * `htree_node_set_rect(node, x, y, w, h)` / `htree_node_set_point(node, x, y)` -
   set the node geometry
 * `htree_node_set_min_size(node, w, h)` - preset the minimum size for the
-  layout (`min_rect`); the `role` field of the node is set directly
+  layout (`min_rect`; the height of a container is its header band); the
+  `role` field of the node is set directly
+* `htree_node_set_footer(node, h)` - the footer band of a container (its
+  exit block, `HTreeNode::footer`), the content between the bands
 * `htree_add_sibling_node(node, new_node)` - append to the sibling list
 * `htree_add_child_node(node, new_node)` - append a child; a simple node
   becomes composite

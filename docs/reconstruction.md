@@ -496,11 +496,14 @@ axis, so the region borders align.
 
 The content rect of a container is the union of its children's rects
 and of its label dummies. The container rect is the content plus
-`PADDING` on every side plus the title block at the top of the rect
-(the name and actions block is drawn there whatever the flow direction):
-the preset minimum rect of a composite gives the size of that block, and
-the content starts below it; without a preset the title block is
-`PADDING` high. The content is finally shifted so that
+`PADDING` on every side plus the header band at the top of the rect and
+the footer band at its bottom, whatever the flow direction: the preset
+minimum rect of a composite gives the size of the header (its name, entry
+and internal actions), `HTreeNode::footer` the height of the footer (its
+exit block, 0 none), and the content - a region of a composite - lies
+between them, as the editor draws a composite; without a preset the header
+is `PADDING` high. The update grows a drawn container keeping the footer
+under its content. The content is finally shifted so that
 the container's origin is (0, 0) in its frame (the rescale of the 1991
 method). A composite whose min rect is wider than the content is widened
 to it, the content centred. The explicit SM border, when present or
@@ -994,6 +997,9 @@ on the result before printing it:
   flow runs along the outer one or across it: the border crossed once;
 * 65 the orthogonal routing in the update (the drawn routes kept) and the
   arrange, the labels beside their runs, the polylines the default;
+* 67 the bands of a composite in a graph and in a region: the content
+  between the header and the footer, the update keeping the footer, no
+  footer the layout of before;
 * 66 the drawn sides in the orthogonal arrange: a transition from the bottom
   of a state to the bottom of another under a third, the branches of a
   choice from its top and bottom tips, a side against the flow not kept;

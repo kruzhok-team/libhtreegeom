@@ -2458,13 +2458,15 @@ static void htree_layout_size_leaf(const HTLayoutContext* ctx, HTreeNode* node)
 	htree_layout_at_least_seed(ctx, node, &node->rect->width, &node->rect->height);
 }
 
-/* P8: the container rect around the content, the title block on top */
+/* P8: the container rect around the content, the header band on top and the
+   footer band (the exit block) at the bottom */
 static void htree_layout_fit(const HTLayoutContext* ctx, const HTreeNode* node, double cw, double ch,
 							 double* W, double* H, double* inset_x, double* inset_y)
 {
 	const HTLayoutOptions* o = &ctx->opts;
 	double min_w = node && node->min_rect ? node->min_rect->width : 0.0;
-	double min_h = node && node->min_rect ? node->min_rect->height : 0.0;
+	double footer = node ? node->footer : 0.0;
+	double min_h = (node && node->min_rect ? node->min_rect->height : 0.0) + footer;
 	double title = node && node->min_rect ? node->min_rect->height : o->padding;
 
 	if (cw <= 0.0 && ch <= 0.0) {
@@ -2477,7 +2479,7 @@ static void htree_layout_fit(const HTLayoutContext* ctx, const HTreeNode* node, 
 	}
 	*W = cw + 2 * o->padding;
 	if (min_w > *W) *W = min_w;
-	*H = title + o->padding + ch + o->padding;
+	*H = title + o->padding + ch + o->padding + footer;
 	htree_layout_at_least_seed(ctx, node, W, H);
 	*inset_x = o->padding + (*W - 2 * o->padding - cw) / 2.0;
 	*inset_y = title + o->padding;
@@ -2741,10 +2743,11 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 		if (node && (!is_root || ctx->reconstruct_sm || ctx->sm_had_rect || node->rect)) {
 			htree_layout_content_bounds(ctx, ci, &bounds);
 			if (node->rect) {
-				/* grow-only around the content with the padding */
+				/* grow-only around the content with the padding, the footer
+				   band below it */
 				double x1 = bounds.x - ctx->opts.padding, y1 = bounds.y - ctx->opts.padding;
 				double x2 = bounds.x + bounds.width + ctx->opts.padding;
-				double y2 = bounds.y + bounds.height + ctx->opts.padding;
+				double y2 = bounds.y + bounds.height + ctx->opts.padding + node->footer;
 				double rx2 = node->rect->x + node->rect->width, ry2 = node->rect->y + node->rect->height;
 				if (bounds.width > 0.0 || bounds.height > 0.0) {
 					if (x1 < node->rect->x) node->rect->x = x1;
@@ -2762,12 +2765,13 @@ static int htree_layout_finish(HTLayoutContext* ctx, int ci, int dir)
 				node->rect->width = W;
 				node->rect->height = H;
 			} else {
-				/* a new rect around the drawn content keeps the title band */
+				/* a new rect around the drawn content keeps the header and
+				   the footer bands */
 				node->rect = htree_new_rect();
 				node->rect->x = bounds.x - ctx->opts.padding;
 				node->rect->y = bounds.y - fit_iy;
 				node->rect->width = bounds.width + 2 * ctx->opts.padding;
-				node->rect->height = bounds.height + fit_iy + ctx->opts.padding;
+				node->rect->height = bounds.height + fit_iy + ctx->opts.padding + node->footer;
 				if (node->rect->width < W) node->rect->width = W;
 				if (node->rect->height < H) node->rect->height = H;
 			}

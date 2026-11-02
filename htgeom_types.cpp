@@ -372,6 +372,12 @@ void htree_node_set_min_size(HTreeNode* node, double w, double h)
 	node->min_rect->height = h;
 }
 
+void htree_node_set_footer(HTreeNode* node, double h)
+{
+	if (!node) return ;
+	node->footer = h > 0.0 ? h : 0.0;
+}
+
 void htree_add_sibling_node(HTreeNode* node, HTreeNode* new_node)
 {
 	if (!node || !new_node) return ;
@@ -419,6 +425,7 @@ HTreeNode* htree_copy_node(const HTreeNode* src)
 	if (src->min_rect) {
 		dst->min_rect = htree_copy_rect(src->min_rect);
 	}
+	dst->footer = src->footer;
 	if (src->children) {
 		for (src_child = src->children; src_child; src_child = src_child->next) {
 			dst_child = htree_copy_node(src_child);
