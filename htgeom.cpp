@@ -61,8 +61,12 @@ static int homog_point_to_htree(const h2d::Point2dD& hgpoint, HTreePoint& point)
 static h2d::FRectD htree_rect_to_homog(const HTreeRect* rect)
 {
 	if (rect) {
-		return h2d::FRectD(rect->x, rect->y,
-						   rect->x + rect->width, rect->y + rect->height);
+		/* homog2d's FRect throws on a zero-width or zero-height rect (a
+		   border connection point, a collapsed node); widen a degenerate
+		   side by HTREE_COORD_EPS so the rect stays valid for the bounds */
+		double w = std::fabs(rect->width)  > HTREE_COORD_EPS ? rect->width  : HTREE_COORD_EPS;
+		double h = std::fabs(rect->height) > HTREE_COORD_EPS ? rect->height : HTREE_COORD_EPS;
+		return h2d::FRectD(rect->x, rect->y, rect->x + w, rect->y + h);
 	}
 	return h2d::FRectD();
 }

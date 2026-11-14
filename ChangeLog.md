@@ -39,6 +39,11 @@ Changed:
   spot beside its anchor clear of every drawn node, route and label, else on
   the shelf after the drawn content, and grows the containers over it.
 
+Fixed:
+- a zero-width or zero-height node rect (a border connection point, a collapsed
+  node) no longer throws from the homog2d `FRect` while collecting the bounds:
+  a degenerate side is widened by `HTREE_COORD_EPS`.
+
 ## Version 1.2.0
 
 Added:
