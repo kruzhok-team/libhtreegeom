@@ -1,11 +1,9 @@
 # libhtgeom project changelog
 
-## Version 1.3.1 (unreleased)
+## Version 1.3.1
 
 Fixed:
-- a zero-width or zero-height node rect (a border connection point, a collapsed
-  node) no longer throws from the homog2d `FRect` while collecting the bounds:
-  a degenerate side is widened by `HTREE_COORD_EPS`.
+- a zero-width or zero-height node rect no longer throws from the exception.
 
 ## Version 1.3.0
 
