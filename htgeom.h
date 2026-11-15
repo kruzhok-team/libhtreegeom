@@ -34,7 +34,7 @@
 
 #define HTREE_GEOM_LIB_VERSION_MAJOR 1
 #define HTREE_GEOM_LIB_VERSION_MINOR 3
-#define HTREE_GEOM_LIB_VERSION_PATCH 0
+#define HTREE_GEOM_LIB_VERSION_PATCH 1
 
 #ifdef __cplusplus
 extern "C" {
